@@ -1,14 +1,15 @@
 from flask import Flask
 import datetime
+import numpy as np
 
 
 class ParseError(Exception):
     def __init__(self, *args):
-        super.__init__(*args)
+        super().__init__(*args)
 
 
 app = Flask(__name__)
-log_folder_path = './Bluefors_HASSALEH/log_files/'
+log_folder_path = 'C:/Users/User/Desktop/BlueFors_HASSALEH/log_files/'
 temperature_folder_path = log_folder_path + 'Lsci372Reader/'
 valve_control_folder_path = log_folder_path + 'ValveControl/'
 
@@ -25,7 +26,8 @@ def get_full_filename(partial_filename, date):
 
 def _parse_line(log_file_path):
     with open(log_file_path, "r") as log_file:
-        return log_file.readlines()[-1].split(',')
+        line = log_file.readlines()[-1].rstrip(' ' + ',' + '\n')
+        return line.split(',')
 
 
 def get_line_delay(line):
@@ -46,7 +48,7 @@ def _parse_actual_line(log_folder_path, partial_filename, date, max_line_delay):
     line = _parse_line(log_file_path)
     if get_line_delay(line).seconds > max_line_delay:
         raise ParseError
-    return line
+    return line[2:]
 
 
 def parse_actual_line(log_folder_path, partial_filename, max_line_delay=120):
@@ -64,17 +66,16 @@ def parse_actual_line(log_folder_path, partial_filename, max_line_delay=120):
 def get_temperature(channel_num):
     partial_filename = f'CH{channel_num} T '
     try:
-        actual_line = parse_actual_line(temperature_folder_path, partial_filename, max_line_delay=1000000)
+        actual_line = parse_actual_line(temperature_folder_path, partial_filename)
     except ParseError:
         return NaN
 
-    temperature = float(actual_line[2])
+    temperature = float(actual_line[0])
 
     if temperature == 0:
         return NaN
 
     return temperature
-
 
 def get_temperatures():
     result = ''
@@ -83,11 +84,37 @@ def get_temperatures():
         result += f'bluefors_temperature{{stage="{stage}"}} {temperature}\n'
     return result
 
+def get_pressures():
+    channels_num = 6
+    result = ''
+    partial_filename = 'maxigauge '
+    try:
+        line = parse_actual_line(valve_control_folder_path, partial_filename)
+        data = np.asarray(line).reshape((channels_num, -1))
+        for channel, status, pressure in zip(data[:, 0], data[:, 2], data[:, 3]):
+            if not int(status):
+                pressure = NaN
+            result += f'bluefors_pressure{{channel="{channel}"}} {pressure}\n'
+        return result
+    except ParseError:
+        return ''
+
+
+def get_flow():
+    partial_filename = 'Flowmeter '
+    try:
+        line = parse_actual_line(valve_control_folder_path, partial_filename)
+        return f'bluefors_flow {line[0]}'
+    except ParseError:
+        return ''
+
 
 @app.route("/metrics")
 def metrics():
     res = ''
     res += get_temperatures()
+    res += get_pressures()
+    res += get_flow()
     return res
 
 
