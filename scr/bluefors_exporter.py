@@ -69,7 +69,7 @@ class BlueforsAPIExporter:
 
     def get_pressure(self, channel: int):
         target_value = f"mapper.bflegacy.double.p{channel}"
-        return float(self._get_value_from_target(target_value)) * 1e-3
+        return float(self._get_value_from_target(target_value))
 
     def get_temperature(self, flange: str):
         target_value = f"mapper.bflegacy.double.t{flange}"
