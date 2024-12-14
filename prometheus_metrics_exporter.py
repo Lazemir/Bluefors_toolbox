@@ -20,6 +20,8 @@ NaN = float('NaN')
 def get_temperature(stage):
     try:
         temperature = exporter.get_temperature(flange=stage)
+        if temperature == 0:
+            return NaN
         return temperature
     except ParseError:
         return NaN
