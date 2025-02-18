@@ -1,72 +1,110 @@
 import os
-from flask import Flask
-from dotenv import load_dotenv
 
-from bluefors_temperature_exporter import ParseError
-from scr.bluefors_exporter import BlueforsAPIExporter
+from dotenv import load_dotenv
+from prometheus_client import Gauge, make_wsgi_app
+from flask import Flask
+from werkzeug.middleware.dispatcher import DispatcherMiddleware
+from waitress import serve
+from functools import wraps
+
+from scr.exceptions import APIError
+from scr.instrument_drivers import BlueforsLD400
 
 load_dotenv()
 
-print(os.getenv("CERTIFICATE_PATH"))
-exporter = BlueforsAPIExporter(ip=os.getenv("IP"),
-                               port=int(os.getenv("PORT")),
-                               key=os.getenv("API_KEY"),
-                               certificate_path=os.getenv("CERTIFICATE_PATH")
-                               )
+bluefors = BlueforsLD400('bluefors',
+                         ip=os.getenv("IP"),
+                         port=int(os.getenv("PORT")),
+                         api_key=os.getenv("API_KEY"),
+                         certificate_path=os.getenv("CERTIFICATE_PATH"))
 
 app = Flask(__name__)
 NaN = float('NaN')
 
-def get_temperature(stage):
-    try:
-        temperature = exporter.get_temperature(flange=stage)
-        if temperature == 0:
-            return NaN
-        return temperature
-    except ParseError:
-        return NaN
 
-def get_pressure(channel):
-    try:
-        pressure = exporter.get_pressure(channel=channel)
-        return pressure
-    except ParseError:
-        return NaN
+def handle_exceptions(*exceptions):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except exceptions:
+                return NaN
+        return wrapper
+    return decorator
 
-def get_flow():
-    try:
-        flow = exporter.get_flow()
-        return flow
-    except ParseError:
+
+@handle_exceptions(APIError)
+def get_temperature(flange: str) -> float:
+    sensor = getattr(bluefors.lakeshore.sensors, flange)
+    temperature: float = sensor.temperature()
+    if temperature == 0:
         return NaN
+    return temperature
+
+
+@handle_exceptions(APIError)
+def get_pressure(sensor: str) -> float:
+    sensor = getattr(bluefors.maxigauge, sensor)
+    pressure: float = sensor.pressure()
+    return pressure
+
+
+@handle_exceptions(APIError)
+def get_flow() -> float:
+    flow: float = bluefors.vc.flow()
+    return flow
+
+
+flanges = ('pt1', 'pt2', 'still', 'mc')
+temperature_metric = Gauge(namespace='bluefors',
+                           name="temperature",
+                           documentation="Temperature of flanges",
+                           labelnames=('flange',),
+                           unit='K')
+
+pressure_sensors = (f'p{i}' for i in range(1, 7))
+pressure_metric = Gauge(namespace='bluefors',
+                        name="pressure",
+                        documentation="Pressures of DR cycle",
+                        labelnames=('sensor',),
+                        unit='bar')
+
+flow_metric = Gauge(namespace='bluefors',
+                    name='flow',
+                    documentation='Flow in DR cycle',
+                    unit='mmol_per_s')
+
+def update_metrics():
+    for flange in flanges:
+        temperature = get_temperature(flange)
+        temperature_metric.labels(flange).set(temperature)
+
+    for sensor in pressure_sensors:
+        pressure = get_pressure(sensor)
+        pressure_metric.labels(sensor).set(pressure)
+
+    flow = get_flow()
+    flow_metric.set(flow)
+
 
 @app.route('/')
 def main():
     return "Prometheus metrics exporter for dilution refrigerator"
 
-@app.route('/metrics', methods=["GET"])
-def get_metrics():
-    """Add temperature, pressure and flow metrics"""
-    metrics = []
 
-    flange_stage_mapping = {"50k": 1, "4k": 2, "still": 3, "mixing": 4}
+class MetricsWSGIApp:
+    def __init__(self, wsgi_app):
+        self.wsgi_app = wsgi_app
 
-    for flange in ["50k", "4k", "still", "mixing"]:
-        temperature = get_temperature(flange)
-        metric = f"bluefors_temperature{{stage=\"{flange_stage_mapping[flange]}\"}} {temperature}"
-        metrics.append(metric)
+    def __call__(self, environ, start_response):
+        update_metrics()
+        return self.wsgi_app(environ, start_response)
 
-    for channel in range(1, 7):
-        pressure = get_pressure(channel)
-        channel = f"CH{channel}"
-        metric = f"bluefors_pressure{{channel=\"{channel}\"}} {pressure}"
-        metrics.append(metric)
 
-    flow = get_flow()
-    metric = f'bluefors_flow {flow}'
-    metrics.append(metric)
-    return "\n".join(metrics), 200
-
+app.wsgi_app = DispatcherMiddleware(app.wsgi_app, {
+    '/metrics': MetricsWSGIApp(make_wsgi_app())
+})
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=9101)
+    serve(app, host='0.0.0.0', port=9101)
