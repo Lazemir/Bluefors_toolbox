@@ -10,12 +10,11 @@ from requests import Response
 
 from scr.exceptions import APIError
 from scr.instrument_drivers.bluefors.cryomech import CPA
+from scr.instrument_drivers.bluefors.edwards_nXDS import EdwardsNXDS
 from scr.instrument_drivers.bluefors.lakeshore_model_372 import Lakeshore
 from scr.instrument_drivers.bluefors.maxigauge import Maxigauge
+from scr.instrument_drivers.bluefors.pfeiffer_TC400 import PfeifferTC400
 from scr.instrument_drivers.bluefors.vc import VC
-
-
-# from qcodes.parameters import Parameter, ParamRawDataType
 
 
 def _get_value_from_response(data, target: str) -> Any:
@@ -47,6 +46,8 @@ class BlueforsLD400(Instrument):
         self.add_submodule('lakeshore', Lakeshore(self, 'lakeshore'))
         self.add_submodule('maxigauge', Maxigauge(self, 'maxigauge'))
         self.add_submodule('vc', VC(self, 'vc'))
+        self.add_submodule('tc400', PfeifferTC400(self, 'tc400'))
+        self.add_submodule('nxds', EdwardsNXDS(self, 'nxds'))
 
     def _get_request_uri(self, target: str) -> str:
         endpoint = f'{target}'.replace('.', '/')

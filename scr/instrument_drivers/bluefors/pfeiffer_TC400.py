@@ -5,13 +5,18 @@ from qcodes.instrument import InstrumentBaseKWArgs
 from scr.instrument_drivers.bluefors.utils import BlueforsApiModule, ReadonlyParameter
 
 
-class VC(BlueforsApiModule):
-    device = 'driver.vc'
+class PfeifferTC400(BlueforsApiModule):
+    device = 'driver.tc400'
 
     def __init__(self, parent: 'BlueforsApi | BlueforsApiModule', name: str, **kwargs: Unpack[InstrumentBaseKWArgs]):
         super().__init__(parent, name, **kwargs)
 
-        self.add_parameter('flow',
+        self.add_parameter('active_rotational_speed',
                            ReadonlyParameter,
                            get_parser=float,
-                           unit='mmol/s')
+                           unit='Hz')
+
+        self.add_parameter('drive_power',
+                           ReadonlyParameter,
+                           get_parser=float,
+                           unit='W')

@@ -17,7 +17,6 @@ class ReadonlyParameter(qcodes.parameters.Parameter):
         if target is not None:
             self.target = target
 
-
     def get_raw(self) -> qcodes.parameters.ParamRawDataType:
         """Read the value of the parameter."""
         return self.instrument.get_value(self.target)
@@ -27,6 +26,7 @@ class Parameter(ReadonlyParameter):
     def set_raw(self, value: qcodes.parameters.ParamRawDataType) -> None:
         """Set the value of the parameter."""
         self.instrument.set_value(self.target, value)
+
 
 class BlueforsApiModule(InstrumentModule):
     parent: 'BlueforsLD400'

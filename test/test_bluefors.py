@@ -4,7 +4,8 @@ import os
 from dotenv import load_dotenv
 
 from scr.instrument_drivers.bluefors import BlueforsLD400
-
+from scr.instrument_drivers.bluefors.edwards_nXDS import EdwardsNXDS
+from scr.instrument_drivers.bluefors.pfeiffer_TC400 import PfeifferTC400
 
 load_dotenv()
 
@@ -54,3 +55,20 @@ class TestBlueforsApi(unittest.TestCase):
         vc = self.bluefors.vc
 
         self.assertIsInstance(vc.flow(), float)
+
+    def test_tc400(self):
+        tc400: PfeifferTC400 = self.bluefors.tc400
+
+        self.assertIsInstance(tc400.active_rotational_speed(), float)
+        self.assertIsInstance(tc400.drive_power(), float)
+
+    def test_nxds(self):
+        nxds: EdwardsNXDS = self.bluefors.nxds
+
+        self.assertIsInstance(nxds.controller_temperature(), float)
+        self.assertIsInstance(nxds.link_current(), float)
+        self.assertIsInstance(nxds.link_power(), float)
+        self.assertIsInstance(nxds.link_voltage(), float)
+        self.assertIsInstance(nxds.pump_temperature(), float)
+        self.assertIsInstance(nxds.rotational_frequency(), float)
+        self.assertIsInstance(nxds.run_hours(), float)

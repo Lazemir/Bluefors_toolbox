@@ -24,7 +24,6 @@ class CPA(BlueforsApiModule):
                                                                         get_parser=float,
                                                                         unit='H')
 
-
         self.coolant_in_temperature: ReadonlyParameter = self.add_parameter('coolant_in_temperature',
                                                                             ReadonlyParameter,
                                                                             get_parser=float,
