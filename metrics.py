@@ -87,7 +87,7 @@ class PulseTubeCompressorMetrics(BlueforsMetrics):
         # Create and define metrics using the base class utility method
         self.motor_current = self.create_gauge(name='motor_current',
                                                documentation='Motor current of pulse tube compressor',
-                                               unit='amper')
+                                               unit='amperes')
         self.coolant_in_temperature = self.create_gauge(name='coolant_in_temperature',
                                                          documentation='Coolant input temperature of pulse tube compressor',
                                                          unit='celsius')
@@ -102,10 +102,10 @@ class PulseTubeCompressorMetrics(BlueforsMetrics):
                                                     unit='celsius')
         self.low_pressure = self.create_gauge(name='low_pressure',
                                               documentation='Low pressure in pulse tube circuit',
-                                              unit='bar')
+                                              unit='bars')
         self.high_pressure = self.create_gauge(name='high_pressure',
                                                documentation='High pressure in pulse tube circuit',
-                                               unit='bar')
+                                               unit='bars')
 
     def update_metrics(self):
         cpa = self.api.cpa
@@ -127,7 +127,7 @@ class ScrollPumpMetrics(BlueforsMetrics):
                                                         unit='celsius')
         self.link_current = self.create_gauge(name='link_current',
                                                         documentation='Scroll pump current',
-                                                        unit='amper')
+                                                        unit='amperes')
         self.link_power = self.create_gauge(name='link_power',
                                                         documentation='Scroll pump power',
                                                         unit='watt')
@@ -192,11 +192,11 @@ class GasHandlingSystemMetrics(BlueforsMetrics):
         self.pressure = self.create_gauge(name="pressure",
                           documentation="Gas handling system pressures",
                           labelnames=('sensor',),
-                          unit='millibar')
+                          unit='millibars')
 
         self.flow = self.create_gauge(name='flow',
                           documentation='Mixture flow through dilution refrigerate',
-                          unit='millimol_per_second')
+                          unit='millimoles_per_second')
 
     def update_metrics(self):
         for sensor in self.pressure_sensors:
@@ -208,7 +208,7 @@ class GasHandlingSystemMetrics(BlueforsMetrics):
 
 
 class TemperatureMetrics(BlueforsMetrics):
-    flanges = ('pt1', 'pt2', 'still', 'mc')
+    flanges = ('pt1', 'pt2', 'still', 'mxc')
 
     def __init__(self, api: BlueforsLD400):
         super().__init__(api, subsystem='flanges')
@@ -216,7 +216,7 @@ class TemperatureMetrics(BlueforsMetrics):
         self.temperature = self.create_gauge(name='temperature',
                                             documentation="Temperature of flanges",
                                             labelnames=('flange',),
-                                            unit='kelvin')
+                                            unit='kelvins')
 
     @handle_exceptions(APIError)
     def get_temperature(self, flange: str) -> float:

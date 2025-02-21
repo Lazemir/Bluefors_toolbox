@@ -39,7 +39,7 @@ class LakeshoreInputs(BlueforsApiModule):
         sensors = {'pt1': 1,
                    'pt2': 2,
                    'still': 5,
-                   'mc': 6}
+                   'mxc': 6}
 
         for channel_name, channel_index in sensors.items():
             channel = Sensor(self, str(channel_index))
