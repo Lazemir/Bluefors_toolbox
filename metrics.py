@@ -192,7 +192,7 @@ class GasHandlingSystemMetrics(BlueforsMetrics):
         self.pressure = self.create_gauge(name="pressure",
                           documentation="Gas handling system pressures",
                           labelnames=('sensor',),
-                          unit='millibars')
+                          unit='bars')
 
         self.flow = self.create_gauge(name='flow',
                           documentation='Mixture flow through dilution refrigerate',
