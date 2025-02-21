@@ -173,7 +173,7 @@ class TurboPumpMetrics(BlueforsMetrics):
 
 
 class GasHandlingSystemMetrics(BlueforsMetrics):
-    pressure_sensors = (f'p{i}' for i in range(1, 7))
+    pressure_sensors = [f'p{i}' for i in range(1, 7)]
 
     @handle_exceptions(APIError)
     def get_pressure(self, sensor: str) -> float:
