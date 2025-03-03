@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from enum import IntEnum
 from functools import wraps
+import re
 
 from prometheus_client import Gauge, Counter, Enum
 from prometheus_client.metrics import MetricWrapperBase
@@ -190,6 +191,16 @@ class SwitchState(IntEnum):
     ON = True
 
 
+def transform_valve_index(valve: str) -> str:
+    match = re.match(r"(v)(\d+)$", valve)
+    if match:
+        prefix, num_str = match.groups()
+        if len(num_str) == 1:
+            num_str = num_str.zfill(2)
+        return f"{prefix}{num_str}"
+    return valve
+
+
 class GasHandlingSystemMetrics(BlueforsMetrics):
     pressure_sensors = [f'p{i}' for i in range(1, 6 + 1)]
     valves = [f'v{i}' for i in range(1, 21 + 1)]
@@ -272,7 +283,7 @@ class GasHandlingSystemMetrics(BlueforsMetrics):
 
         for valve in self.valves:
             valve_state = self.get_valve_state(valve)
-            self.valve.labels(valve).set(valve_state)
+            self.valve.labels(transform_valve_index(valve)).set(valve_state)
 
         for turbo in self.turbos:
             turbo_state = self.get_turbo_state(turbo)
