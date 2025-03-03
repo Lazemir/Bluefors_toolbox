@@ -100,6 +100,8 @@ class TestBlueforsApi(unittest.TestCase):
             heat_switch = getattr(control_unit, f'hs_{heat_switch_name}')
             self.assertIsInstance(heat_switch(), bool)
 
+        self.assertIsInstance(control_unit.pulse_tube(), bool)
+
         for scroll_number in range(1, 2 + 1):
             scroll = getattr(control_unit, f'scroll{scroll_number}')
             self.assertIsInstance(scroll(), bool)

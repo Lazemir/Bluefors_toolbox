@@ -8,7 +8,7 @@ from waitress import serve
 
 from scr.instrument_drivers import BlueforsLD400
 from metrics import (BlueforsMetrics, PulseTubeCompressorMetrics, GasHandlingSystemMetrics, TemperatureMetrics,
-                     ScrollPumpMetrics, TurboPumpMetrics)
+                     ScrollPumpMetrics, TurboPumpMetrics, ControlUnitMetrics)
 
 load_dotenv()
 
@@ -21,6 +21,7 @@ bluefors = BlueforsLD400('bluefors',
 metrics_list: list[BlueforsMetrics] = [
     PulseTubeCompressorMetrics(bluefors),
     GasHandlingSystemMetrics(bluefors),
+    ControlUnitMetrics(bluefors),
     TemperatureMetrics(bluefors),
     ScrollPumpMetrics(bluefors),
     TurboPumpMetrics(bluefors)

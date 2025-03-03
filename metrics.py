@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from enum import IntEnum
 from functools import wraps
 import re
+from typing import Literal
 
 from prometheus_client import Gauge, Counter, Enum
 from prometheus_client.metrics import MetricWrapperBase
@@ -242,8 +243,6 @@ class GasHandlingSystemMetrics(BlueforsMetrics):
         scroll_state = scroll()
         return scroll_state
 
-
-
     def __init__(self, api: BlueforsLD400):
         super().__init__(api, subsystem='mixture')
 
@@ -274,6 +273,7 @@ class GasHandlingSystemMetrics(BlueforsMetrics):
         self.compressor = self.create_gauge(name='compressor_state',
                                             documentation="Gas handling system's compressor state")
 
+
     def update_metrics(self):
         for sensor in self.pressure_sensors:
             pressure = self.get_pressure(sensor)
@@ -294,6 +294,38 @@ class GasHandlingSystemMetrics(BlueforsMetrics):
             self.scroll.labels(scroll).set(scroll_state)
 
         self.compressor.set(self.get_compressor_state())
+
+
+class ControlUnitMetrics(BlueforsMetrics):
+    heat_switches = ['hs_still', 'hs_mc']
+
+    @handle_exceptions(APIError)
+    def get_heat_switch_state(self, heat_switch: str) -> bool:
+        heat_switch = getattr(self.api.control_unit, heat_switch)
+        heat_switch_state = heat_switch()
+        return heat_switch_state
+
+    @handle_exceptions(APIError)
+    def get_pulse_tube_state(self) -> bool:
+        pulse_tube = self.api.control_unit.pulse_tube
+        pulse_tube_state = pulse_tube()
+        return pulse_tube_state
+
+    def __init__(self, api: BlueforsLD400):
+        super().__init__(api, subsystem='control_unit')
+
+        self.heat_switch = self.create_gauge(name='heat_switch_state',
+                                             documentation="Heat switch state",
+                                             labelnames=('heat_switch', ))
+
+        self.pulse_tube = self.create_gauge(name='pulse_tube_state',
+                                            documentation="Pulse tube compressor state")
+    def update_metrics(self):
+        for heat_switch in self.heat_switches:
+            heat_switch_state = self.get_heat_switch_state(heat_switch)
+            self.heat_switch.labels(heat_switch).set(heat_switch_state)
+
+        self.pulse_tube.set(self.api.control_unit.pulse_tube())
 
 
 class TemperatureMetrics(BlueforsMetrics):

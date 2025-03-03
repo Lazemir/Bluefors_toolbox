@@ -23,6 +23,11 @@ class ControlUnit(BlueforsApiModule):
                                target=f'hs-{heat_switch_name}',
                                val_mapping=self._val_mapping)
 
+        self.pulse_tube = self.add_parameter('pulse_tube',
+                                     ReadonlyParameter,
+                                     target='pulsetube',
+                                     val_mapping=self._val_mapping)
+
         for scroll_number in range(1, 2 + 1):
             self.add_parameter(f'scroll{scroll_number}',
                                ReadonlyParameter,
