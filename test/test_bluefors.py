@@ -1,11 +1,14 @@
 import unittest
 import os
+from typing import Iterable
 
 from dotenv import load_dotenv
 
 from scr.instrument_drivers.bluefors import BlueforsLD400
 from scr.instrument_drivers.bluefors.edwards_nXDS import EdwardsNXDS
+from scr.instrument_drivers.bluefors.lakeshore_model_372 import Heater
 from scr.instrument_drivers.bluefors.pfeiffer_TC400 import PfeifferTC400
+from scr.instrument_drivers.bluefors.control_unit import ControlUnit
 
 load_dotenv()
 
@@ -35,7 +38,7 @@ class TestBlueforsApi(unittest.TestCase):
         self.assertIsInstance(lakeshore.scanner.channel(), int)
 
         sensors = lakeshore.sensors
-        channels = [sensors.pt1, sensors.pt2, sensors.still, sensors.mc]
+        channels = [sensors.pt1, sensors.pt2, sensors.still, sensors.mxc]
 
         for channel in channels:
             self.assertIsInstance(channel.temperature(), float)
@@ -72,3 +75,35 @@ class TestBlueforsApi(unittest.TestCase):
         self.assertIsInstance(nxds.pump_temperature(), float)
         self.assertIsInstance(nxds.rotational_frequency(), float)
         self.assertIsInstance(nxds.run_hours(), float)
+
+    def test_heater(self):
+        heaters: Iterable[str] = ('sample', )
+
+        for heater_name in heaters:
+            heater: Heater = getattr(self.bluefors.lakeshore.heaters, heater_name)
+            self.assertIsInstance(heater.p(), float)
+            self.assertIsInstance(heater.i(), float)
+            self.assertIsInstance(heater.d(), float)
+            self.assertIsInstance(heater.setpoint(), float)
+
+            self.assertIsInstance(heater.range(), str)
+            self.assertIsInstance(heater.mode(), str)
+
+    def test_control_unit(self):
+        control_unit: ControlUnit = self.bluefors.control_unit
+
+        for valve_number in range(1, 21 + 1):
+            valve = getattr(control_unit, f'v{valve_number}')
+            self.assertIsInstance(valve(), bool)
+
+        for heat_switch_name in ('still', 'mc'):
+            heat_switch = getattr(control_unit, f'hs_{heat_switch_name}')
+            self.assertIsInstance(heat_switch(), bool)
+
+        for scroll_number in range(1, 2 + 1):
+            scroll = getattr(control_unit, f'scroll{scroll_number}')
+            self.assertIsInstance(scroll(), bool)
+
+        self.assertIsInstance(control_unit.turbo1(), bool)
+
+        self.assertIsInstance(control_unit.compressor(), bool)

@@ -36,7 +36,11 @@ class BlueforsApiModule(InstrumentModule):
         super().__init__(parent, name, **kwargs)
 
     def _get_target(self, target: str) -> str:
-        return f'{self.device}.{target}'.rstrip('.')
+        return f'{self.device}.{target}'.strip('.')
+
+    def call_method(self, target: str):
+        target = self._get_target(target)
+        self.parent.call_method(target)
 
     def get_value(self, target: str) -> Any:
         target = self._get_target(target)

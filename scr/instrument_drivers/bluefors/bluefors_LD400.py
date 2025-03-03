@@ -14,6 +14,7 @@ from scr.instrument_drivers.bluefors.edwards_nXDS import EdwardsNXDS
 from scr.instrument_drivers.bluefors.lakeshore_model_372 import Lakeshore
 from scr.instrument_drivers.bluefors.maxigauge import Maxigauge
 from scr.instrument_drivers.bluefors.pfeiffer_TC400 import PfeifferTC400
+from scr.instrument_drivers.bluefors.control_unit import ControlUnit
 from scr.instrument_drivers.bluefors.vc import VC
 
 
@@ -48,6 +49,7 @@ class BlueforsLD400(Instrument):
         self.add_submodule('vc', VC(self, 'vc'))
         self.add_submodule('tc400', PfeifferTC400(self, 'tc400'))
         self.add_submodule('nxds', EdwardsNXDS(self, 'nxds'))
+        self.add_submodule('control_unit', ControlUnit(self, 'control_unit'))
 
     def _get_request_uri(self, target: str) -> str:
         endpoint = f'{target}'.replace('.', '/')

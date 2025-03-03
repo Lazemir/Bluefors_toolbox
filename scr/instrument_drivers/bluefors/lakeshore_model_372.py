@@ -1,6 +1,7 @@
-from typing import Unpack, TYPE_CHECKING
+from typing import Unpack, TYPE_CHECKING, ClassVar
 
 from qcodes.instrument import InstrumentBaseKWArgs
+from qcodes.instrument_drivers.Lakeshore.Lakeshore_model_372 import LakeshoreModel372Output as QCoDeS_LakeshoreOutput
 
 from scr.instrument_drivers.bluefors.utils import BlueforsApiChannel, ReadonlyParameter, BlueforsApiModule, Parameter
 
@@ -11,7 +12,6 @@ if TYPE_CHECKING:
 class LakeshoreChannel(BlueforsApiChannel):
     def __init__(self, parent: 'BlueforsApi | BlueforsApiModule', name: str, **kwargs: Unpack[InstrumentBaseKWArgs]):
         super().__init__(parent, name, **kwargs)
-        self.device = f'channel{self._short_name}'
 
 
 class Sensor(LakeshoreChannel):
@@ -26,8 +26,34 @@ class Sensor(LakeshoreChannel):
 
 
 class Heater(LakeshoreChannel):
+    MODES: ClassVar[dict[str, int]] = QCoDeS_LakeshoreOutput.MODES
+    RANGES: ClassVar[dict[str, int]] = QCoDeS_LakeshoreOutput.RANGES
+
     def __init__(self, parent: 'BlueforsApi | BlueforsApiModule', name: str, **kwargs: Unpack[InstrumentBaseKWArgs]):
         super().__init__(parent, name, **kwargs)
+        self.device = self._short_name
+
+        self.p = self.add_parameter('p',
+                           Parameter,
+                           get_parser=float)
+        self.i = self.add_parameter('i',
+                                    Parameter,
+                                    get_parser=float)
+        self.d = self.add_parameter('d',
+                                    Parameter,
+                                    get_parser=float)
+
+        self.setpoint = self.add_parameter('setpoint',
+                                           Parameter,
+                                           get_parser=float)
+
+        self.range = self.add_parameter('range',
+                                        Parameter,
+                                        val_mapping=self.RANGES)
+
+        self.mode = self.add_parameter('mode',
+                                        Parameter,
+                                        val_mapping=self.MODES)
 
 
 class LakeshoreInputs(BlueforsApiModule):
