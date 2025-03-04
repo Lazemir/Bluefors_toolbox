@@ -216,8 +216,9 @@ class GasHandlingSystemMetrics(BlueforsMetrics):
 
     @handle_exceptions(APIError)
     def get_flow(self) -> float:
-        flow: float = self.api.vc.flow()
-        return flow
+        flow_mmol_per_s: float = self.api.vc.flow()
+        flow_mol_per_s = flow_mmol_per_s / 1000
+        return flow_mol_per_s
 
     @handle_exceptions(APIError)
     def get_valve_state(self, valve: str) -> ValveState:
@@ -253,7 +254,7 @@ class GasHandlingSystemMetrics(BlueforsMetrics):
 
         self.flow = self.create_gauge(name='flow',
                                       documentation='Mixture flow through dilution refrigerator',
-                                      unit='millimoles_per_second')
+                                      unit='moles_per_second')
 
         self.valve = self.create_gauge(name="valve_state",
                                        documentation="Gas handling system's valve state",
