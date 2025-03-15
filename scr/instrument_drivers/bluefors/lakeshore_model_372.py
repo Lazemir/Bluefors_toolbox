@@ -3,7 +3,8 @@ from typing import Unpack, TYPE_CHECKING, ClassVar
 from qcodes.instrument import InstrumentBaseKWArgs
 from qcodes.instrument_drivers.Lakeshore.Lakeshore_model_372 import LakeshoreModel372Output as QCoDeS_LakeshoreOutput
 
-from scr.instrument_drivers.bluefors.utils import BlueforsApiChannel, ReadonlyParameter, BlueforsApiModule, Parameter
+from scr.instrument_drivers.bluefors.utils import BlueforsApiChannel, ReadonlyParameter, BlueforsApiModule, Parameter, \
+    _bool_mapping
 
 if TYPE_CHECKING:
     from .bluefors_LD400 import BlueforsLD400
@@ -55,19 +56,23 @@ class Heater(LakeshoreChannel):
                                         Parameter,
                                         val_mapping=self.MODES)
 
+        self.manual_value = self.add_parameter('manual_value',
+                                               Parameter,
+                                               get_parser=float)
+
 
 class LakeshoreInputs(BlueforsApiModule):
     device = 'status.inputs'
 
+    sensors = {'pt1': 1,
+               'pt2': 2,
+               'still': 5,
+               'mxc': 6}
+
     def __init__(self, parent: 'BlueforsApi | BlueforsApiModule', name: str, **kwargs: Unpack[InstrumentBaseKWArgs]):
         super().__init__(parent, name, **kwargs)
 
-        sensors = {'pt1': 1,
-                   'pt2': 2,
-                   'still': 5,
-                   'mxc': 6}
-
-        for channel_name, channel_index in sensors.items():
+        for channel_name, channel_index in self.sensors.items():
             channel = Sensor(self, str(channel_index))
             self.add_submodule(channel_name, channel)
 
@@ -75,16 +80,16 @@ class LakeshoreInputs(BlueforsApiModule):
 class LakeshoreOutputs(BlueforsApiModule):
     device: str = 'settings.outputs'
 
+    heaters = {
+        'warm_up',
+        'still',
+        'sample'
+    }
+
     def __init__(self, parent: 'BlueforsApi | BlueforsApiModule', name: str, **kwargs: Unpack[InstrumentBaseKWArgs]):
         super().__init__(parent, name, **kwargs)
 
-        heaters = {
-            'warm_up',
-            'still',
-            'sample'
-        }
-
-        for heater_name in heaters:
+        for heater_name in self.heaters:
             channel = Heater(self, heater_name)
             self.add_submodule(heater_name, channel)
 
@@ -97,7 +102,7 @@ class LakeshoreScanner(BlueforsApiModule):
 
         self.autoscan: Parameter = self.add_parameter('autoscan',
                                                       Parameter,
-                                                      get_parser=bool)
+                                                      val_mapping=_bool_mapping)
 
         self.channel: Parameter = self.add_parameter('channel',
                                                      Parameter,

@@ -8,7 +8,7 @@ from waitress import serve
 
 from scr.instrument_drivers import BlueforsLD400
 from metrics import (BlueforsMetrics, PulseTubeCompressorMetrics, GasHandlingSystemMetrics, TemperatureMetrics,
-                     ScrollPumpMetrics, TurboPumpMetrics, ControlUnitMetrics)
+                     ScrollPumpMetrics, TurboPumpMetrics, ControlUnitMetrics, HeaterMetrics)
 
 load_dotenv()
 
@@ -24,7 +24,8 @@ metrics_list: list[BlueforsMetrics] = [
     ControlUnitMetrics(bluefors),
     TemperatureMetrics(bluefors),
     ScrollPumpMetrics(bluefors),
-    TurboPumpMetrics(bluefors)
+    TurboPumpMetrics(bluefors),
+    HeaterMetrics(bluefors)
 ]
 
 app = Flask(__name__)

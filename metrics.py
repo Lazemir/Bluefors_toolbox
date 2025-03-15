@@ -10,6 +10,7 @@ from prometheus_client.metrics import MetricWrapperBase
 from scr.instrument_drivers import BlueforsLD400
 from scr.exceptions import APIError
 from scr.instrument_drivers.bluefors.edwards_nXDS import EdwardsNXDS
+from scr.instrument_drivers.bluefors.lakeshore_model_372 import Heater
 from scr.instrument_drivers.bluefors.pfeiffer_TC400 import PfeifferTC400
 
 NaN = float('NaN')
@@ -352,3 +353,97 @@ class TemperatureMetrics(BlueforsMetrics):
         for flange in self.flanges:
             temperature = self.get_temperature(flange)
             self.temperature.labels(flange).set(temperature)
+
+
+class HeaterMetrics(BlueforsMetrics):
+    heaters = {
+        'still',
+        'sample'
+    }
+
+    def __init__(self, api: BlueforsLD400):
+        super().__init__(api, subsystem='heater')
+
+        self.mode = self.create_gauge(name='mode',
+                                      documentation=f"Heater mode, one of: {Heater.MODES}",
+                                      labelnames=('heater',))
+        self.range = self.create_gauge(name='range',
+                                       documentation=f"Heater range, one of: {Heater.RANGES}",
+                                       labelnames=('heater',))
+        self.p = self.create_gauge(name='p',
+                                   documentation="Proportional Gain (P)",
+                                   labelnames=('heater',))
+        self.i = self.create_gauge(name='i',
+                                   documentation="Integral Gain (I)",
+                                   labelnames=('heater',))
+        self.d = self.create_gauge(name='d',
+                                   documentation="Derivative Gain (D)",
+                                   labelnames=('heater',))
+        self.setpoint = self.create_gauge(name='setpoint',
+                                          documentation="Heater setpoint",
+                                          labelnames=('heater',),
+                                          unit='kelvins')
+        self.manual_value = self.create_gauge(name='manual_value',
+                                              documentation="Manual heater value",
+                                              labelnames=('heater',))
+
+    def _get_heater(self, heater_name):
+        return getattr(self.api.lakeshore.heaters, heater_name)
+
+    @handle_exceptions(APIError)
+    def get_mode(self, heater: str) -> str:
+        heater = self._get_heater(heater)
+        return heater.mode()
+
+    @handle_exceptions(APIError)
+    def get_range(self, heater: str) -> str:
+        heater = self._get_heater(heater)
+        return heater.range()
+
+    @handle_exceptions(APIError)
+    def get_p(self, heater: str) -> float:
+        heater = self._get_heater(heater)
+        return heater.p()
+
+    @handle_exceptions(APIError)
+    def get_i(self, heater: str) -> float:
+        heater = self._get_heater(heater)
+        return heater.i()
+
+    @handle_exceptions(APIError)
+    def get_d(self, heater: str) -> float:
+        heater = self._get_heater(heater)
+        return heater.d()
+
+    @handle_exceptions(APIError)
+    def get_setpoint(self, heater: str) -> float:
+        heater = self._get_heater(heater)
+        return heater.setpoint()
+
+    @handle_exceptions(APIError)
+    def get_manual_value(self, heater: str) -> float:
+        heater = self._get_heater(heater)
+        return heater.manual_value()
+
+    def update_metrics(self):
+        for heater in self.heaters:
+            mode: str = self.get_mode(heater)
+            self.mode.labels(heater).set(Heater.MODES[mode])
+
+            self.range.labels(heater).set(Heater.RANGES[self.get_range(heater)])
+
+            if mode == 'open_loop':
+                self.p.labels(heater).set(self.get_p(heater))
+                self.i.labels(heater).set(self.get_i(heater))
+                self.d.labels(heater).set(self.get_d(heater))
+                self.setpoint.labels(heater).set(self.get_setpoint(heater))
+            else:
+                self.p.labels(heater).set(NaN)
+                self.i.labels(heater).set(NaN)
+                self.d.labels(heater).set(NaN)
+                self.setpoint.labels(heater).set(NaN)
+
+            if mode == 'closed_loop' or mode == 'open_loop':
+                self.manual_value.labels(heater).set(self.get_manual_value(heater))
+            else:
+                self.manual_value.labels(heater).set(NaN)

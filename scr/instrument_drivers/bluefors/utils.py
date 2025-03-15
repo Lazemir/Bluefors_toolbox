@@ -53,3 +53,5 @@ class BlueforsApiModule(InstrumentModule):
 
 class BlueforsApiChannel(BlueforsApiModule, InstrumentChannel):
     pass
+
+_bool_mapping = {False: '0', True: '1'}
