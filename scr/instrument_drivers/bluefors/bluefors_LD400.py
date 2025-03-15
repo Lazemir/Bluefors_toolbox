@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 from typing import Any, Optional, Unpack
 
 import requests
@@ -8,7 +9,7 @@ from qcodes.instrument import (
 )
 from requests import Response
 
-from scr.exceptions import APIError
+from scr.exceptions import APIError, OutdatedError
 from scr.instrument_drivers.bluefors.cryomech import CPA
 from scr.instrument_drivers.bluefors.edwards_nXDS import EdwardsNXDS
 from scr.instrument_drivers.bluefors.lakeshore_model_372 import Lakeshore
@@ -20,9 +21,13 @@ from scr.instrument_drivers.bluefors.vc import VC
 
 def _get_value_from_response(data, target: str) -> Any:
     try:
-        latest_valid_value = data["data"][f"{target}"]["content"]["latest_valid_value"]
-        value = latest_valid_value["value"]
-        synchronization_status = latest_valid_value["status"]
+        latest_value = data["data"][f"{target}"]["content"]["latest_value"]
+        value: float = latest_value["value"]
+        is_outdated: bool = latest_value["outdated"]
+        synchronization_status: str = latest_value["status"]
+        if is_outdated:
+            timestamp_ms: int = latest_value["timestamp"]
+            raise OutdatedError(datetime.fromtimestamp(timestamp_ms / 1_000))
         if synchronization_status != "SYNCHRONIZED":
             raise APIError("Data not synchronized", status_code=500)
         return value
