@@ -26,7 +26,7 @@ def _get_value_from_response(data, target: str) -> Any:
         is_outdated: bool = latest_value["outdated"]
         synchronization_status: str = latest_value["status"]
         if is_outdated:
-            timestamp_ms: int = latest_value["timestamp"]
+            timestamp_ms: int = latest_value["date"]
             raise OutdatedError(datetime.fromtimestamp(timestamp_ms / 1_000))
         if synchronization_status != "SYNCHRONIZED":
             raise APIError("Data not synchronized", status_code=500)
