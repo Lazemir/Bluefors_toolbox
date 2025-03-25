@@ -119,31 +119,31 @@ class PulseTubeCompressorMetrics(BlueforsMetrics):
                                                unit='bars')
     @handle_exceptions(APIError)
     def get_motor_current(self):
-        return self.api.pulse_tube.motor_current()
+        return self.api.cpa.motor_current()
 
     @handle_exceptions(APIError)
     def get_coolant_in_temperature(self):
-        return to_celsius(self.api.pulse_tube.coolant_in_temperature())
+        return to_celsius(self.api.cpa.coolant_in_temperature())
 
     @handle_exceptions(APIError)
     def get_coolant_out_temperature(self):
-        return to_celsius(self.api.pulse_tube.coolant_out_temperature())
+        return to_celsius(self.api.cpa.coolant_out_temperature())
 
     @handle_exceptions(APIError)
     def get_oil_temperature(self):
-        return to_celsius(self.api.pulse_tube.oil_temperature())
+        return to_celsius(self.api.cpa.oil_temperature())
 
     @handle_exceptions(APIError)
     def get_helium_temperature(self):
-        return to_celsius(self.api.pulse_tube.helium_temperature())
+        return to_celsius(self.api.cpa.helium_temperature())
 
     @handle_exceptions(APIError)
     def get_low_pressure(self):
-        return self.api.pulse_tube.low_pressure()
+        return self.api.cpa.low_pressure()
 
     @handle_exceptions(APIError)
     def get_high_pressure(self):
-        return self.api.pulse_tube.high_pressure()
+        return self.api.cpa.high_pressure()
 
     def update_metrics(self):
         self.motor_current.set(self.get_motor_current())
