@@ -131,11 +131,11 @@ class PulseTubeCompressorMetrics(BlueforsMetrics):
 
     @handle_exceptions(APIError)
     def get_oil_temperature(self):
-        return to_celsius(self.api.cpa.oil_temperature())
+        return self.api.cpa.oil_temperature()
 
     @handle_exceptions(APIError)
     def get_helium_temperature(self):
-        return to_celsius(self.api.cpa.helium_temperature())
+        return self.api.cpa.helium_temperature()
 
     @handle_exceptions(APIError)
     def get_low_pressure(self):
