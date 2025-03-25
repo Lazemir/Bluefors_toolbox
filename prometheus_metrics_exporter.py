@@ -40,8 +40,9 @@ class MetricsWSGIApp:
         self.wsgi_app = wsgi_app
 
     def __call__(self, environ, start_response):
-        for metrics in metrics_list:
-            metrics.update_metrics()
+        with bluefors.read_session():
+            for metrics in metrics_list:
+                metrics.update_metrics()
         return self.wsgi_app(environ, start_response)
 
 

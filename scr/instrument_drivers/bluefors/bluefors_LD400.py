@@ -1,4 +1,5 @@
 import json
+from contextlib import contextmanager
 from datetime import datetime
 from typing import Any, Optional, Unpack
 
@@ -36,6 +37,8 @@ def _get_value_from_response(data, target: str) -> Any:
 
 
 class BlueforsLD400(Instrument):
+    N_TRY = 5
+
     def __init__(self,
                  name: str,
                  api_key: str,
@@ -47,6 +50,8 @@ class BlueforsLD400(Instrument):
         self.__url = f'https://{ip}:{port}/values'
         self.__uri_vars = f'?prettyprint=1&key={api_key}'
         self._certificate_path = certificate_path or False
+
+        self.__data: Optional[dict] = None
 
         self.add_submodule('cpa', CPA(self, 'cpa'))
         self.add_submodule('lakeshore', Lakeshore(self, 'lakeshore'))
@@ -89,8 +94,26 @@ class BlueforsLD400(Instrument):
         self._post_request(target, call=1)
 
     def get_value(self, target: str) -> Any:
-        data = self._get_value_request(target)
-        return _get_value_from_response(data.json(), target)
+        data = self.__data or self._get_value_request(target)
+        try:
+            return _get_value_from_response(data.json(), target)
+        except OutdatedError as e:
+            for i in range(self.N_TRY):
+                try:
+                    data = self._get_value_request(target)
+                    return _get_value_from_response(data.json(), target)
+                except OutdatedError:
+                    continue
+            raise e
 
     def set_value(self, target: str, value: Any) -> None:
         self._post_request(target, value=value)
+
+    @contextmanager
+    def read_session(self):
+        self.__data = self._get_value_request('')
+        try:
+            yield
+        finally:
+            self.__data = None
+

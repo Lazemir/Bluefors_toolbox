@@ -110,3 +110,14 @@ class TestBlueforsApi(unittest.TestCase):
         self.assertIsInstance(control_unit.turbo1(), bool)
 
         self.assertIsInstance(control_unit.compressor(), bool)
+
+    def test_context_manager(self):
+        with self.bluefors.read_session():
+            self.test_cpa()
+            self.test_lakeshore()
+            self.test_maxigauge()
+            self.test_vs()
+            self.test_tc400()
+            self.test_nxds()
+            self.test_heater()
+            self.test_control_unit()

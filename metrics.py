@@ -2,7 +2,6 @@ from abc import ABC, abstractmethod
 from enum import IntEnum
 from functools import wraps
 import re
-from typing import Literal
 
 from prometheus_client import Gauge, Counter, Enum
 from prometheus_client.metrics import MetricWrapperBase
@@ -153,15 +152,37 @@ class ScrollPumpMetrics(BlueforsMetrics):
                                                       documentation='Scroll pump rotational frequency',
                                                       unit='hertz')
 
-    def update_metrics(self):
-        nxds: EdwardsNXDS = self.api.nxds
+    @handle_exceptions(APIError)
+    def get_controller_temperature(self):
+        return to_celsius(self.api.nxds.controller_temperature())
 
-        self.controller_temperature.set(to_celsius(nxds.controller_temperature()))
-        self.link_current.set(nxds.link_current())
-        self.link_power.set(nxds.link_power())
-        self.link_voltage.set(nxds.link_voltage())
-        self.pump_temperature.set(to_celsius(nxds.pump_temperature()))
-        self.rotational_frequency.set(nxds.rotational_frequency())
+    @handle_exceptions(APIError)
+    def get_link_current(self):
+        return self.api.nxds.link_current()
+
+    @handle_exceptions(APIError)
+    def get_link_power(self):
+        return self.api.nxds.link_power()
+
+    @handle_exceptions(APIError)
+    def get_link_voltage(self):
+        return self.api.nxds.link_voltage()
+
+    @handle_exceptions(APIError)
+    def get_pump_temperature(self):
+        return to_celsius(self.api.nxds.pump_temperature())
+
+    @handle_exceptions(APIError)
+    def get_rotational_frequency(self):
+        return self.api.nxds.rotational_frequency()
+
+    def update_metrics(self):
+        self.controller_temperature.set(self.get_controller_temperature())
+        self.link_current.set(self.get_link_current())
+        self.link_power.set(self.get_link_power())
+        self.link_voltage.set(self.get_link_voltage())
+        self.pump_temperature.set(self.get_pump_temperature())
+        self.rotational_frequency.set(self.get_rotational_frequency())
 
 
 class TurboPumpMetrics(BlueforsMetrics):
@@ -176,11 +197,17 @@ class TurboPumpMetrics(BlueforsMetrics):
                                              documentation='Current power of the pump',
                                              unit='watt')
 
-    def update_metrics(self):
-        tc400: PfeifferTC400 = self.api.tc400
+    @handle_exceptions(APIError)
+    def get_active_rotational_speed(self):
+        return self.api.tc400.active_rotational_speed()
 
-        self.active_rotational_speed.set(tc400.active_rotational_speed())
-        self.drive_power.set(tc400.drive_power())
+    @handle_exceptions(APIError)
+    def get_drive_power(self):
+        return self.api.tc400.drive_power()
+
+    def update_metrics(self):
+        self.active_rotational_speed.set(self.get_active_rotational_speed())
+        self.drive_power.set(self.get_drive_power())
 
 
 class ValveState(IntEnum):
@@ -327,7 +354,7 @@ class ControlUnitMetrics(BlueforsMetrics):
             heat_switch_state = self.get_heat_switch_state(heat_switch)
             self.heat_switch.labels(heat_switch).set(heat_switch_state)
 
-        self.pulse_tube.set(self.api.control_unit.pulse_tube())
+        self.pulse_tube.set(self.get_pulse_tube_state())
 
 
 class TemperatureMetrics(BlueforsMetrics):

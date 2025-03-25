@@ -15,5 +15,5 @@ class APIError(Exception):
 
 class OutdatedError(APIError):
     def __init__(self, outdated_datetime: datetime):
-        message = f'Outdated since {outdated_datetime}'
+        message = f'Outdated since {outdated_datetime}, for {datetime.now() - outdated_datetime}'
         super().__init__(message, status_code=500)
