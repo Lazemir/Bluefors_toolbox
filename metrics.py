@@ -117,16 +117,42 @@ class PulseTubeCompressorMetrics(BlueforsMetrics):
         self.high_pressure = self.create_gauge(name='high_pressure',
                                                documentation='High pressure in pulse tube circuit',
                                                unit='bars')
+    @handle_exceptions(APIError)
+    def get_motor_current(self):
+        return self.api.pulse_tube.motor_current()
+
+    @handle_exceptions(APIError)
+    def get_coolant_in_temperature(self):
+        return to_celsius(self.api.pulse_tube.coolant_in_temperature())
+
+    @handle_exceptions(APIError)
+    def get_coolant_out_temperature(self):
+        return to_celsius(self.api.pulse_tube.coolant_out_temperature())
+
+    @handle_exceptions(APIError)
+    def get_oil_temperature(self):
+        return to_celsius(self.api.pulse_tube.oil_temperature())
+
+    @handle_exceptions(APIError)
+    def get_helium_temperature(self):
+        return to_celsius(self.api.pulse_tube.helium_temperature())
+
+    @handle_exceptions(APIError)
+    def get_low_pressure(self):
+        return self.api.pulse_tube.low_pressure()
+
+    @handle_exceptions(APIError)
+    def get_high_pressure(self):
+        return self.api.pulse_tube.high_pressure()
 
     def update_metrics(self):
-        cpa = self.api.cpa
-        self.motor_current.set(cpa.motor_current())
-        self.coolant_in_temperature.set(to_celsius(cpa.coolant_in_temperature()))
-        self.coolant_out_temperature.set(to_celsius(cpa.coolant_out_temperature()))
-        self.oil_temperature.set(to_celsius(cpa.oil_temperature()))
-        self.helium_temperature.set(to_celsius(cpa.helium_temperature()))
-        self.low_pressure.set(cpa.low_pressure())
-        self.high_pressure.set(cpa.high_pressure())
+        self.motor_current.set(self.get_motor_current())
+        self.coolant_in_temperature.set(self.get_coolant_in_temperature())
+        self.coolant_out_temperature.set(self.get_coolant_out_temperature())
+        self.oil_temperature.set(to_celsius(self.get_oil_temperature()))
+        self.helium_temperature.set(to_celsius(self.get_helium_temperature()))
+        self.low_pressure.set(self.get_low_pressure())
+        self.high_pressure.set(self.get_high_pressure())
 
 
 class ScrollPumpMetrics(BlueforsMetrics):
