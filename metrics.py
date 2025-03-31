@@ -1,16 +1,14 @@
+import re
 from abc import ABC, abstractmethod
 from enum import IntEnum
 from functools import wraps
-import re
 
 from prometheus_client import Gauge, Counter, Enum
 from prometheus_client.metrics import MetricWrapperBase
 
-from scr.instrument_drivers import BlueforsLD400
 from scr.exceptions import APIError
-from scr.instrument_drivers.bluefors.edwards_nXDS import EdwardsNXDS
+from scr.instrument_drivers import BlueforsLD400
 from scr.instrument_drivers.bluefors.lakeshore_model_372 import Heater
-from scr.instrument_drivers.bluefors.pfeiffer_TC400 import PfeifferTC400
 
 NaN = float('NaN')
 
@@ -444,16 +442,6 @@ class HeaterMetrics(BlueforsMetrics):
         return getattr(self.api.lakeshore.heaters, heater_name)
 
     @handle_exceptions(APIError)
-    def get_mode(self, heater: str) -> str:
-        heater = self._get_heater(heater)
-        return heater.mode()
-
-    @handle_exceptions(APIError)
-    def get_range(self, heater: str) -> str:
-        heater = self._get_heater(heater)
-        return heater.range()
-
-    @handle_exceptions(APIError)
     def get_p(self, heater: str) -> float:
         heater = self._get_heater(heater)
         return heater.p()
@@ -479,24 +467,30 @@ class HeaterMetrics(BlueforsMetrics):
         return heater.manual_value()
 
     def update_metrics(self):
-        for heater in self.heaters:
-            mode: str = self.get_mode(heater)
-            self.mode.labels(heater).set(Heater.MODES[mode])
+        for heater_name in self.heaters:
+            try:
+                heater = self._get_heater(heater_name)
+                heater_mode = heater.mode()
+                heater_range = heater.range()
+                self.mode.labels(heater_name).set(Heater.MODES[heater_mode])
+                self.range.labels(heater_name).set(Heater.RANGES[heater_range])
+            except APIError:
+                self.mode.labels(heater_name).set(NaN)
+                self.range.labels(heater_name).set(NaN)
+                heater_mode = 'off'
 
-            self.range.labels(heater).set(Heater.RANGES[self.get_range(heater)])
-
-            if mode == 'open_loop':
-                self.p.labels(heater).set(self.get_p(heater))
-                self.i.labels(heater).set(self.get_i(heater))
-                self.d.labels(heater).set(self.get_d(heater))
-                self.setpoint.labels(heater).set(self.get_setpoint(heater))
+            if heater_mode == 'closed_loop':
+                self.p.labels(heater_name).set(self.get_p(heater_name))
+                self.i.labels(heater_name).set(self.get_i(heater_name))
+                self.d.labels(heater_name).set(self.get_d(heater_name))
+                self.setpoint.labels(heater_name).set(self.get_setpoint(heater_name))
             else:
-                self.p.labels(heater).set(NaN)
-                self.i.labels(heater).set(NaN)
-                self.d.labels(heater).set(NaN)
-                self.setpoint.labels(heater).set(NaN)
+                self.p.labels(heater_name).set(NaN)
+                self.i.labels(heater_name).set(NaN)
+                self.d.labels(heater_name).set(NaN)
+                self.setpoint.labels(heater_name).set(NaN)
 
-            if mode == 'closed_loop' or mode == 'open_loop':
-                self.manual_value.labels(heater).set(self.get_manual_value(heater))
+            if heater_mode == 'closed_loop' or heater_mode == 'open_loop':
+                self.manual_value.labels(heater_name).set(self.get_manual_value(heater_name))
             else:
-                self.manual_value.labels(heater).set(NaN)
+                self.manual_value.labels(heater_name).set(NaN)
