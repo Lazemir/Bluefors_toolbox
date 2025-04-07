@@ -60,6 +60,9 @@ class Heater(LakeshoreChannel):
                                                Parameter,
                                                get_parser=float)
 
+    def accept(self):
+        self.call_method('write')
+
 
 class LakeshoreInputs(BlueforsApiModule):
     device = 'status.inputs'
