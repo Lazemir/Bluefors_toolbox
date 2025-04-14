@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from typing import Unpack, TYPE_CHECKING, ClassVar
 
 from qcodes.instrument import InstrumentBaseKWArgs
@@ -62,6 +63,19 @@ class Heater(LakeshoreChannel):
 
     def accept(self):
         self.call_method('write')
+
+    @contextmanager
+    def write_session(self):
+        try:
+            yield
+        finally:
+            self.accept()
+
+    def turn_off(self):
+        with self.write_session():
+            self.mode('off')
+            self.range('off')
+            self.manual_value(0)
 
 
 class LakeshoreInputs(BlueforsApiModule):

@@ -4,8 +4,6 @@ from typing import Literal, Optional
 
 import numpy as np
 from datetime import datetime, timedelta
-from numpy import clip
-
 from scr.instrument_drivers.bluefors.lakeshore_model_372 import Lakeshore, LakeshoreInputs, Heater, LakeshoreOutputs
 
 from scr.instrument_drivers import BlueforsLD400
@@ -66,17 +64,27 @@ class TemperatureController:
         self._max_temperature = max_temperature
 
     def __enter__(self):
-        if self._target_sensor == 'mxc':
-            self._lakeshore.scanner.channel(6)
-        if self._target_sensor == 'still':
-            self._lakeshore.scanner.channel(5)
-        self._lakeshore.scanner.autoscan(False)
+        scanner = self._lakeshore.scanner
+        match self._target_sensor:
+            case 'pt1':
+                scanner.channel(1)
+            case 'pt2':
+                scanner.channel(2)
+            case 'still':
+                scanner.channel(5)
+            case 'mxc':
+                scanner.channel(6)
+            case _:
+                raise ValueError(f'Unexpected target sensor: {self._target_sensor}')
+        self._autoscan_at_enter = scanner.autoscan()
+        if self._autoscan_at_enter:
+            scanner.autoscan(False)
         self._context_active = True
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         self._context_active = False
-        self._lakeshore.scanner.autoscan(True)
+        self._lakeshore.scanner.autoscan(self._autoscan_at_enter)
 
     def _check_context(self):
         if not self._context_active:
@@ -90,7 +98,6 @@ class TemperatureController:
             raise RuntimeError('Maximum temperature exceeded')
 
     def wait_temperature_to_stabilize(self, tolerance: float) -> timedelta:
-# TODO Relative tolerance is better
         start_time = datetime.now()
         self._check_context()
         for i in range(10):
@@ -114,14 +121,15 @@ class PIDCalibrator(TemperatureController):
     def calibrate_ranges(self, tolerance=1e-3):
         ranges = []
 
-        self.heater.mode('open_loop')
-        self.heater.manual_value(50)
-        self.heater.accept()
+        with self.heater.write_session():
+            self.heater.mode('open_loop')
+            self.heater.manual_value(50)
+
         for range_value in Heater.RANGES:
             if range_value == 'off':
                 continue
-            self.heater.range(range_value)
-            self.heater.accept()
+            with self.heater.write_session():
+                self.heater.range(range_value)
             time.sleep(5)
             try:
                 print(f'{datetime.now()}: Begin temperature stabilization for range {range_value}')
@@ -130,25 +138,29 @@ class PIDCalibrator(TemperatureController):
                 ranges.append(temperature)
             except RuntimeError as e:
                 break
-        self.heater.range('off')
-        self.heater.manual_value(0)
-        self.heater.accept()
+
+        self.heater.turn_off()
         return ranges
 
-    #TODO turn off heater on __exit__
+    def __exit__(self, exc_type, exc_value, traceback):
+        super().__exit__(exc_type, exc_value, traceback)
+        self.heater.turn_off()
 
     def calibrate_p(self, setpoint: float, tolerance: float):
-        self.heater.mode('closed_loop')
+        with self.heater.write_session:
+            self.heater.mode('closed_loop')
+            self.heater.setpoint(setpoint)
         p = 5
-        self.heater.setpoint(setpoint)
         while p < 1e4:
-            self.heater.p(p)
+            with self.heater.write_session:
+                self.heater.p(p)
             mean_temperature = self.wait_temperature_to_stabilize(tolerance=tolerance)
             if mean_temperature > setpoint - tolerance:
                 break
             p *= 2
         p = np.clip(p, 0, 1e4 - 1) * 0.6
-        self.heater.p(p)
+        with self.heater.write_session:
+            self.heater.p(p)
 
     def calibrate_i(self, setpoint: float, tolerance: float):
         ...

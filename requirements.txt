@@ -5,3 +5,5 @@ qcodes>=0.50.1
 prometheus_client>=0.21.1
 werkzeug>=3.1.3
 waitress>=3.0.2
+numpy>=1.26.4
+timeout-decorator>=0.5.0
