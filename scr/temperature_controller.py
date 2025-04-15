@@ -65,17 +65,7 @@ class TemperatureController:
 
     def __enter__(self):
         scanner = self._lakeshore.scanner
-        match self._target_sensor:
-            case 'pt1':
-                scanner.channel(1)
-            case 'pt2':
-                scanner.channel(2)
-            case 'still':
-                scanner.channel(5)
-            case 'mxc':
-                scanner.channel(6)
-            case _:
-                raise ValueError(f'Unexpected target sensor: {self._target_sensor}')
+        scanner.channel(self._target_sensor)
         self._autoscan_at_enter = scanner.autoscan()
         if self._autoscan_at_enter:
             scanner.autoscan(False)
@@ -150,19 +140,19 @@ class PIDCalibrator(TemperatureController):
         self.heater.turn_off()
 
     def calibrate_p(self, setpoint: float, tolerance: float):
-        with self.heater.write_session:
+        with self.heater.write_session():
             self.heater.mode('closed_loop')
             self.heater.setpoint(setpoint)
         p = 5
         while p < 1e4:
-            with self.heater.write_session:
+            with self.heater.write_session():
                 self.heater.p(p)
             mean_temperature = self.wait_temperature_to_stabilize(tolerance=tolerance)
             if mean_temperature > setpoint - tolerance:
                 break
             p *= 2
         p = np.clip(p, 0, 1e4 - 1) * 0.6
-        with self.heater.write_session:
+        with self.heater.write_session():
             self.heater.p(p)
 
     def calibrate_i(self, setpoint: float, tolerance: float):

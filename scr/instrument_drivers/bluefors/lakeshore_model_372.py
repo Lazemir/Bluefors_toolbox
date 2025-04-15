@@ -59,7 +59,8 @@ class Heater(LakeshoreChannel):
 
         self.manual_value = self.add_parameter('manual_value',
                                                Parameter,
-                                               get_parser=float)
+                                               get_parser=float,
+                                               set_parser=float)
 
         self.display_units = self.add_parameter('display_units',
                                                 Parameter,
