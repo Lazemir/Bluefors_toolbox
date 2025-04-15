@@ -2,7 +2,7 @@ from typing import Unpack
 
 from qcodes.instrument import InstrumentBaseKWArgs
 
-from .utils import BlueforsApiModule, BlueforsApiChannel, ReadonlyParameter, Parameter
+from .utils import BlueforsApiModule, BlueforsApiChannel, ReadonlyParameter, Parameter, _bool_mapping
 
 
 class PressureSensor(BlueforsApiChannel):
@@ -18,7 +18,7 @@ class PressureSensor(BlueforsApiChannel):
 
         self.add_parameter('enabled',
                            Parameter,
-                           get_parser=bool)
+                           val_mapping=_bool_mapping)
 
 
 class Maxigauge(BlueforsApiModule):
