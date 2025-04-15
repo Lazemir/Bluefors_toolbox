@@ -35,7 +35,7 @@ class TestBlueforsApi(unittest.TestCase):
         lakeshore = self.bluefors.lakeshore
 
         self.assertIsInstance(lakeshore.scanner.autoscan(), bool)
-        self.assertIsInstance(lakeshore.scanner.channel(), int)
+        self.assertIsInstance(lakeshore.scanner.channel(), str)
 
         sensors = lakeshore.sensors
         channels = [sensors.pt1, sensors.pt2, sensors.still, sensors.mxc]

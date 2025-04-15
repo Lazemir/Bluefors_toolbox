@@ -394,6 +394,9 @@ class TemperatureMetrics(BlueforsMetrics):
 
     @handle_exceptions(APIError)
     def get_temperature(self, flange: str) -> float:
+        lakeshore = self.api.lakeshore
+        if not lakeshore.scanner.autoscan() and flange != lakeshore.scanner.channel():
+            return NaN
         sensor = getattr(self.api.lakeshore.sensors, flange)
         temperature: float = sensor.temperature()
         if temperature == 0:

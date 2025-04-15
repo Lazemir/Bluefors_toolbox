@@ -130,7 +130,7 @@ class LakeshoreScanner(BlueforsApiModule):
 
         self.channel: Parameter = self.add_parameter('channel',
                                                      Parameter,
-                                                     get_parser=int)
+                                                     val_mapping=LakeshoreInputs.sensors)
 
 
 class Lakeshore(BlueforsApiModule):
