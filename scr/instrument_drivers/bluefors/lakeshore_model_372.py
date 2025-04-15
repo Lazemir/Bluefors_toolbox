@@ -61,6 +61,13 @@ class Heater(LakeshoreChannel):
                                                Parameter,
                                                get_parser=float)
 
+        self.display_units = self.add_parameter('display_units',
+                                                Parameter,
+                                                val_mapping={
+                                                    'current': 1,
+                                                    'power': 2
+                                                })
+
     def accept(self):
         self.call_method('write')
 

@@ -84,7 +84,8 @@ class TemperatureController:
 
     def __exit__(self, exc_type, exc_value, traceback):
         self._context_active = False
-        self._lakeshore.scanner.autoscan(self._autoscan_at_enter)
+        if self._autoscan_at_enter:
+            self._lakeshore.scanner.autoscan(self._autoscan_at_enter)
 
     def _check_context(self):
         if not self._context_active:
@@ -117,6 +118,8 @@ class PIDCalibrator(TemperatureController):
     def __init__(self, lakeshore, target_sensor: Literal['pt1', 'pt2', 'still', 'mxc'], heater: Heater, **kwargs):
         super().__init__(lakeshore, target_sensor, **kwargs)
         self.heater = heater
+        with self.heater.write_session():
+            self.heater.display_units('current')
 
     def calibrate_ranges(self, tolerance=1e-3):
         ranges = []
