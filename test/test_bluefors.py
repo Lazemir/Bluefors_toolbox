@@ -35,7 +35,7 @@ class TestBlueforsApi(unittest.TestCase):
         lakeshore = self.bluefors.lakeshore
 
         self.assertIsInstance(lakeshore.scanner.autoscan(), bool)
-        self.assertIsInstance(lakeshore.scanner.channel(), int)
+        self.assertIsInstance(lakeshore.scanner.channel(), str)
 
         sensors = lakeshore.sensors
         channels = [sensors.pt1, sensors.pt2, sensors.still, sensors.mxc]
@@ -89,6 +89,7 @@ class TestBlueforsApi(unittest.TestCase):
             self.assertIsInstance(heater.range(), str)
             self.assertIsInstance(heater.mode(), str)
             self.assertIsInstance(heater.manual_value(), float)
+            self.assertIsInstance(heater.display_units(), str)
 
     def test_control_unit(self):
         control_unit: ControlUnit = self.bluefors.control_unit

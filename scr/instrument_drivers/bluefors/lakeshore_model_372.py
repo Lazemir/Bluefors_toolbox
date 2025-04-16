@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from typing import Unpack, TYPE_CHECKING, ClassVar
 
 from qcodes.instrument import InstrumentBaseKWArgs
@@ -58,7 +59,31 @@ class Heater(LakeshoreChannel):
 
         self.manual_value = self.add_parameter('manual_value',
                                                Parameter,
-                                               get_parser=float)
+                                               get_parser=float,
+                                               set_parser=float)
+
+        self.display_units = self.add_parameter('display_units',
+                                                Parameter,
+                                                val_mapping={
+                                                    'current': 1,
+                                                    'power': 2
+                                                })
+
+    def accept(self):
+        self.call_method('write')
+
+    @contextmanager
+    def write_session(self):
+        try:
+            yield
+        finally:
+            self.accept()
+
+    def turn_off(self):
+        with self.write_session():
+            self.mode('off')
+            self.range('off')
+            self.manual_value(0)
 
 
 class LakeshoreInputs(BlueforsApiModule):
@@ -106,7 +131,7 @@ class LakeshoreScanner(BlueforsApiModule):
 
         self.channel: Parameter = self.add_parameter('channel',
                                                      Parameter,
-                                                     get_parser=int)
+                                                     val_mapping=LakeshoreInputs.sensors)
 
 
 class Lakeshore(BlueforsApiModule):

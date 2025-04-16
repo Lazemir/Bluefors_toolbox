@@ -9,6 +9,7 @@ from prometheus_client.metrics import MetricWrapperBase
 from scr.exceptions import APIError
 from scr.instrument_drivers import BlueforsLD400
 from scr.instrument_drivers.bluefors.lakeshore_model_372 import Heater
+from scr.instrument_drivers.bluefors.maxigauge import PressureSensor
 
 NaN = float('NaN')
 
@@ -262,7 +263,9 @@ class GasHandlingSystemMetrics(BlueforsMetrics):
 
     @handle_exceptions(APIError)
     def get_pressure(self, sensor: str) -> float:
-        sensor = getattr(self.api.maxigauge, sensor)
+        sensor: PressureSensor = getattr(self.api.maxigauge, sensor)
+        if not sensor.enabled():
+            return NaN
         pressure: float = sensor.pressure()
         return pressure
 
@@ -394,6 +397,9 @@ class TemperatureMetrics(BlueforsMetrics):
 
     @handle_exceptions(APIError)
     def get_temperature(self, flange: str) -> float:
+        lakeshore = self.api.lakeshore
+        if not lakeshore.scanner.autoscan() and flange != lakeshore.scanner.channel():
+            return NaN
         sensor = getattr(self.api.lakeshore.sensors, flange)
         temperature: float = sensor.temperature()
         if temperature == 0:
