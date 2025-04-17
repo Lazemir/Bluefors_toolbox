@@ -1,258 +1,316 @@
 import time
 import threading
 from collections import deque
-from typing import Literal
+from typing import Literal, Callable, Optional
 import numpy as np
 from datetime import datetime, timedelta
+from abc import ABC, abstractmethod
+from scipy.optimize import curve_fit
 
+# For displaying the chart in Jupyter Notebook
 import plotly.graph_objects as go
 from IPython.display import display
 
-from scr.instrument_drivers.bluefors.lakeshore_model_372 import Lakeshore, LakeshoreInputs, Heater, LakeshoreOutputs
-from scr.instrument_drivers import BlueforsLD400
+from scr.instrument_drivers.bluefors.lakeshore_model_372 import Heater
 
 
 class TimedQueue:
     def __init__(self, ttl: timedelta, minimal_timespan: timedelta) -> None:
         self._temperature_queue = deque()
         self._time_queue = deque()
-        assert ttl > minimal_timespan
+        assert ttl > minimal_timespan, "TTL must exceed minimal timespan"
         self.ttl = ttl
         self.full_time = minimal_timespan
 
     def _cleanup(self) -> None:
-        current_time = datetime.now()
-        while self._time_queue and current_time - self._time_queue[0] > self.ttl:
+        now = datetime.now()
+        while self._time_queue and now - self._time_queue[0] > self.ttl:
             self._time_queue.popleft()
             self._temperature_queue.popleft()
 
-    def append(self, value) -> None:
+    def append(self, value: float) -> None:
         self._cleanup()
-        current_time = datetime.now()
-        self._time_queue.append(current_time)
+        self._time_queue.append(datetime.now())
         self._temperature_queue.append(value)
 
     def span(self) -> float:
         self._cleanup()
-        if len(self._time_queue) < 2:
-            raise RuntimeError('The queue is empty')
-        return np.max(self._temperature_queue) - np.min(self._temperature_queue)
+        if len(self._temperature_queue) < 2:
+            raise RuntimeError('Not enough data to compute span')
+        return float(np.max(self._temperature_queue) - np.min(self._temperature_queue))
 
     def mean(self) -> float:
         self._cleanup()
-        return np.mean(self._temperature_queue)
+        return float(np.mean(self._temperature_queue))
 
     def std(self) -> float:
         self._cleanup()
-        return np.std(self._temperature_queue)
+        return float(np.std(self._temperature_queue))
 
-    def is_full(self):
-        return self._time_queue and self._time_queue[-1] - self._time_queue[0] > self.full_time
+    def is_full(self) -> bool:
+        self._cleanup()
+        return bool(self._time_queue and self._time_queue[-1] - self._time_queue[0] >= self.full_time)
 
     def get_data(self):
-        """Returns lists of recorded times and temperatures."""
+        """Return lists of timestamps and temperature values."""
         self._cleanup()
         return list(self._time_queue), list(self._temperature_queue)
 
 
+class BackgroundWorker(ABC):
+    def __init__(self, update_interval: timedelta):
+        self._update_interval = update_interval
+        self._stop_flag = threading.Event()
+        self._event = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+
+    def start(self):
+        if self._thread and self._thread.is_alive():
+            return
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def stop(self):
+        self._stop_flag.set()
+        self._event.set()
+        if self._thread:
+            self._thread.join()
+
+    @abstractmethod
+    def _run(self):
+        pass
+
+
+class TemperaturePoller(BackgroundWorker):
+    def __init__(
+            self,
+            queue: TimedQueue,
+            sensor_read: Callable[[], float],
+            context_getter: Callable[[], bool],
+            interval_context: timedelta = timedelta(seconds=1),
+            interval_no_context: timedelta = timedelta(seconds=60)
+    ):
+        """
+        Poll sensor in background, append to queue, switch rate by context.
+        """
+        super().__init__(update_interval=interval_no_context)
+        self._queue = queue
+        self._sensor_read = sensor_read
+        self._context_getter = context_getter
+        self._interval_ctx = interval_context
+
+    def _run(self):
+        while not self._stop_flag.is_set():
+            try:
+                val = self._sensor_read()
+                self._queue.append(val)
+            except Exception as e:
+                print(f"Polling error: {e}")
+            # determine next wait
+            interval = self._interval_ctx if self._context_getter() else self._update_interval
+            self._event.wait(interval.total_seconds())
+            self._event.clear()
+
+
+class StableTemperaturePoller(TemperaturePoller):
+    def __init__(
+        self,
+        queue: TimedQueue,
+        sensor_read: Callable[[], float],
+        context_getter: Callable[[], bool],
+        stability_kelvin: float,
+        interval_context: timedelta = timedelta(seconds=1),
+        interval_no_context: timedelta = timedelta(seconds=60)
+    ):
+        """
+        Extends poller: detects stability when slope*window <= stability_kelvin.
+        """
+        super().__init__(queue, sensor_read, context_getter, interval_context, interval_no_context)
+        self.stability_kelvin = stability_kelvin
+        self._stable_event = threading.Event()
+        self._stable_start: Optional[datetime] = None
+
+    def _evaluate_stability(self):
+        if not self._queue.is_full():
+            return
+        times, temps = self._queue.get_data()
+        t0 = times[0]
+        t_secs = np.array([(t - t0).total_seconds() for t in times])
+        y = np.array(temps)
+        k, _ = curve_fit(lambda t, k, b: k * t + b, t_secs, y)[0]
+        window_sec = self._queue.full_time.total_seconds()
+        # total change over window: slope * window length
+        if abs(k * window_sec) <= self.stability_kelvin:
+            if not self._stable_event.is_set():
+                self._stable_start = datetime.now() - self._queue.full_time
+                self._stable_event.set()
+
+    def _run(self):
+        while not self._stop_flag.is_set():
+            try:
+                val = self._sensor_read()
+                self._queue.append(val)
+                self._evaluate_stability()
+            except Exception as e:
+                print(f"Stable poll error: {e}")
+            interval = self._interval_ctx if self._context_getter() else self._update_interval
+            self._event.wait(interval.total_seconds())
+            self._event.clear()
+
+    @property
+    def stable_start_time(self) -> Optional[datetime]:
+        """Returns the datetime when stability was first detected."""
+        return self._stable_start
+
+    def wait_for_stability(self, timeout: Optional[float] = None) -> timedelta:
+        """
+        Blocks until stability is detected or timeout expires.
+        Returns the elapsed time until stability is reached.
+        Raises TimeoutError if the timeout is reached before stability.
+        """
+        start_time = datetime.now()
+        if not self._stable_event.wait(timeout):
+            raise TimeoutError("Temperature did not stabilize within the given timeout")
+        detect_time = datetime.now()
+        return detect_time - start_time
+
+class TemperaturePlotter(BackgroundWorker):
+    def __init__(
+            self,
+            queue: TimedQueue,
+            interval: timedelta = timedelta(seconds=1),
+            stable_getter: Optional[Callable[[], Optional[datetime]]] = None
+    ):
+        """
+        Background plotter: shows queue data, highlights stable points.
+        """
+        super().__init__(update_interval=interval)
+        self._queue = queue
+        self._stable_getter = stable_getter
+
+    def _run(self):
+        fig = go.FigureWidget(data=[
+            go.Scatter(x=[], y=[], mode='lines+markers', name='Temp'),
+            go.Scatter(x=[], y=[], mode='markers', marker=dict(color='green'), name='Stable')
+        ])
+        fig.update_layout(title='Temperature vs Time', xaxis_title='Time', yaxis_title='Temp')
+        display(fig)
+        while not self._stop_flag.is_set():
+            times, temps = self._queue.get_data()
+            stable_start = self._stable_getter() if self._stable_getter else None
+            if stable_start:
+                stable_times = [t for t in times if t >= stable_start]
+                stable_vals = [v for t, v in zip(times, temps) if t >= stable_start]
+            else:
+                stable_times, stable_vals = [], []
+            with fig.batch_update():
+                fig.data[0].x, fig.data[0].y = times, temps
+                fig.data[1].x, fig.data[1].y = stable_times, stable_vals
+            self._event.wait(self._update_interval.total_seconds())
+            self._event.clear()
+
+
 class TemperatureController:
-    def __init__(self, lakeshore, target_sensor: Literal['pt1', 'pt2', 'still', 'mxc'], max_temperature: float):
-        self.last_temperatures = TimedQueue(ttl=timedelta(minutes=10),
-                                            minimal_timespan=timedelta(minutes=5))
+    def __init__(
+            self,
+            lakeshore,
+            target_sensor: Literal['pt1', 'pt2', 'still', 'mxc'],
+            max_temperature: float,
+            stability_kelvin: float = 1e-3
+    ):
+        self.last_temperatures = TimedQueue(
+            ttl=timedelta(minutes=10), minimal_timespan=timedelta(minutes=5)
+        )
         self._lakeshore = lakeshore
-        # Get the temperature function for the given sensor
+        self._target_sensor_name = target_sensor
         self._temperature = getattr(self._lakeshore.sensors, target_sensor).temperature
         self._context_active = False
-        self._target_sensor = target_sensor
-        self._max_temperature = max_temperature
-
-        # Flags and events for the polling thread
-        self._monitor_stop_flag = False
-        self._poll_thread = None
-        self._monitor_event = threading.Event()
-
-        # Flags and events for the plotting thread
-        self._plot_stop_flag = False
-        self._plot_thread = None
-        self._plot_event = threading.Event()
+        self._poller = StableTemperaturePoller(
+            queue=self.last_temperatures,
+            sensor_read=self._temperature,
+            context_getter=lambda: self._context_active,
+            stability_kelvin=stability_kelvin
+        )
+        self._poller.start()
+        self._plotter: Optional[TemperaturePlotter] = None
 
     def __enter__(self):
         scanner = self._lakeshore.scanner
-        scanner.channel(self._target_sensor)
+        scanner.channel(self._target_sensor_name)
         self._autoscan_at_enter = scanner.autoscan()
         if self._autoscan_at_enter:
             scanner.autoscan(False)
         self._context_active = True
-        # Signal any waiting thread to switch to fast polling
-        self._monitor_event.set()
+        # start plotter
+        self._plotter = TemperaturePlotter(
+            queue=self.last_temperatures,
+            stable_getter=lambda: self._poller.stable_start_time
+        )
+        self._plotter.start()
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        # stop plotter
+        if self._plotter:
+            self._plotter.stop()
         self._context_active = False
+        # restore previous autoscan status
         if self._autoscan_at_enter:
-            self._lakeshore.scanner.autoscan(self._autoscan_at_enter)
-        # Signal waiting threads so they can switch mode promptly
-        self._monitor_event.set()
+            self._lakeshore.scanner.autoscan(True)
 
-    def _check_context(self):
-        if not self._context_active:
-            raise RuntimeError("The methods of this object can only be used within a 'with' block")
+    def wait_for_stability(self, timeout: Optional[float] = None) -> timedelta:
+        return self._poller.wait_for_stability(timeout)
 
-    def update_temperature(self) -> None:
-        """Polls the temperature within context (expected to be called every second)."""
-        self._check_context()
-        temperature = self._temperature()
-        self.last_temperatures.append(temperature)
-        if temperature > self._max_temperature:
-            raise RuntimeError('Maximum temperature exceeded')
-
-    def poll_temperature(self) -> None:
-        """
-        Polls the temperature regardless of context.
-        Used in the polling thread to update the measurement queue.
-        """
-        temperature = self._temperature()
-        self.last_temperatures.append(temperature)
-        if temperature > self._max_temperature:
-            raise RuntimeError('Maximum temperature exceeded')
-
-    def wait_temperature_to_stabilize(self, tolerance: float) -> timedelta:
-        """
-        Waits until the temperature stabilizes within a given tolerance.
-        This function continues until the span of values in the full time window is below the tolerance.
-        """
-        start_time = datetime.now()
-        self._check_context()
-        while True:
-            span = self.last_temperatures.span()
-            if self.last_temperatures.is_full() and span < tolerance:
-                full_waiting_time = datetime.now() - start_time
-                stabilization_time = full_waiting_time - self.last_temperatures.full_time
-                return stabilization_time
-            time.sleep(1)
-
-    def start_polling(self,
-                      update_interval_context: timedelta = timedelta(seconds=1),
-                      update_interval_no_context: timedelta = timedelta(seconds=60)):
-        """
-        Starts a separate thread to poll temperature at the specified intervals.
-        The polling interval is faster (e.g. 1 second) when in context and slower (e.g. 60 seconds) otherwise.
-        """
-        if self._poll_thread and self._poll_thread.is_alive():
-            print("Polling thread is already running.")
-            return
-        self._monitor_stop_flag = False
-        self._poll_thread = threading.Thread(
-            target=self._polling,
-            args=(update_interval_context, update_interval_no_context),
-            daemon=True
-        )
-        self._poll_thread.start()
-
-    def _polling(self, update_interval_context: timedelta, update_interval_no_context: timedelta):
-        while not self._monitor_stop_flag:
-            current_interval = update_interval_context if self._context_active else update_interval_no_context
-            try:
-                # Poll temperature without checking for context
-                self.poll_temperature()
-            except Exception as e:
-                print(f"Error updating temperature: {e}")
-            wait_seconds = current_interval.total_seconds()
-            # Wait using event.wait() so that it can be interrupted promptly
-            self._monitor_event.wait(wait_seconds)
-            self._monitor_event.clear()
-
-    def stop_polling(self):
-        """Stops the polling thread."""
-        self._monitor_stop_flag = True
-        self._monitor_event.set()
-
-    def start_plotting(self, update_interval: timedelta = timedelta(seconds=1)):
-        """
-        Starts a separate plotting thread that builds and continuously updates a Plotly chart.
-        The chart displays all data available in the internal queue.
-        """
-        if self._plot_thread and self._plot_thread.is_alive():
-            print("Plotting thread is already running.")
-            return
-        self._plot_stop_flag = False
-        self._plot_thread = threading.Thread(
-            target=self._plotting,
-            args=(update_interval,),
-            daemon=True
-        )
-        self._plot_thread.start()
-
-    def _plotting(self, update_interval: timedelta):
-        # Create and display the Plotly chart in the Notebook
-        fig = go.FigureWidget(data=[go.Scatter(x=[], y=[], mode='lines+markers')])
-        fig.update_layout(
-            title="Temperature vs Time",
-            xaxis_title="Time",
-            yaxis_title="Temperature"
-        )
-        display(fig)
-        while not self._plot_stop_flag:
-            # Get all data from the queue (all timestamps and temperatures)
-            times, temps = self.last_temperatures.get_data()
-            # Update the chart with all available data
-            with fig.batch_update():
-                fig.data[0].x = times
-                fig.data[0].y = temps
-            wait_seconds = update_interval.total_seconds()
-            # Wait using event.wait() so that plotting can be stopped promptly
-            self._plot_event.wait(wait_seconds)
-            self._plot_event.clear()
-
-    def stop_plotting(self):
-        """Stops the plotting thread."""
-        self._plot_stop_flag = True
-        self._plot_event.set()
+    def __del__(self):
+        self._poller.stop()
 
 
 class PIDCalibrator(TemperatureController):
-    def __init__(self, lakeshore, target_sensor: Literal['pt1', 'pt2', 'still', 'mxc'], heater: Heater, **kwargs):
+    def __init__(
+            self,
+            lakeshore,
+            target_sensor: Literal['pt1', 'pt2', 'still', 'mxc'],
+            heater: Heater,
+            **kwargs
+    ):
         super().__init__(lakeshore, target_sensor, **kwargs)
         self.heater = heater
 
     def calibrate_ranges(self, tolerance=1e-3):
-        ranges = []
+        results = []
         with self.heater.write_session():
             self.heater.mode('open_loop')
             self.heater.manual_value(50)
-        for range_value in Heater.RANGES:
-            if range_value == 'off':
+        for r in Heater.RANGES:
+            if r == 'off':
                 continue
             with self.heater.write_session():
-                self.heater.range(range_value)
+                self.heater.range(r)
             time.sleep(5)
-            try:
-                print(f'{datetime.now()}: Begin temperature stabilization for range {range_value}')
-                stabilization_time = self.wait_temperature_to_stabilize(tolerance=tolerance)
-                print(f'{datetime.now()}: Temperature is stable for range {range_value}')
-                ranges.append(stabilization_time)
-            except RuntimeError as e:
+            if self.wait_for_stability(timeout=None):
+                results.append(True)
+            else:
+                results.append(False)
                 break
         self.heater.turn_off()
-        return ranges
+        return results
 
-    def __exit__(self, exc_type, exc_value, traceback):
-        super().__exit__(exc_type, exc_value, traceback)
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        super().__exit__(exc_type, exc_val, exc_tb)
         self.heater.turn_off()
 
     def calibrate_p(self, setpoint: float, tolerance: float):
         with self.heater.write_session():
             self.heater.mode('closed_loop')
             self.heater.setpoint(setpoint)
-        p = 5
+        p = 5.0
         while p < 1e4:
             with self.heater.write_session():
                 self.heater.p(p)
-            mean_temperature = self.wait_temperature_to_stabilize(tolerance=tolerance)
-            if mean_temperature > setpoint - tolerance:
+            if self.wait_for_stability(timeout=None):
                 break
             p *= 2
-        p = np.clip(p, 0, 1e4 - 1) * 0.6
+        p = np.clip(p * 0.6, 0, 1e4)
         with self.heater.write_session():
             self.heater.p(p)
 
