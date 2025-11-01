@@ -65,7 +65,10 @@ class BlueforsLD400(Instrument):
         self._certificate_path = certificate_path or False
 
         self.__data: Optional[Response] = None
+        self.__system_info: Optional[dict[str, Any]] = None
         self.__api_version: Optional[str] = None
+        self.__system_version: Optional[str] = None
+        self.__system_name: Optional[str] = None
 
         self.add_submodule('cpa', CPA(self, 'cpa'))
         self.add_submodule('lakeshore', Lakeshore(self, 'lakeshore'))
@@ -125,9 +128,6 @@ class BlueforsLD400(Instrument):
         return self._get_request(system_url)
 
     def _verify_api_version(self, expected_version: Optional[str]) -> None:
-        if expected_version is None:
-            return
-
         response = self._get_system_request()
         try:
             system_info = response.json()["data"]
@@ -141,13 +141,19 @@ class BlueforsLD400(Instrument):
         if api_version is None:
             raise APIError("API version is not reported by the system", status_code=500)
 
+        self.__system_info = system_info
+        self.__api_version = api_version
+        self.__system_version = system_info.get("system_version")
+        self.__system_name = system_info.get("system_name")
+
+        if expected_version is None:
+            return
+
         if api_version != expected_version:
             raise APIError(
                 f"API version mismatch. Expected {expected_version} but got {api_version}",
                 status_code=500,
             )
-
-        self.__api_version = api_version
 
     def call_method(self, target: str) -> None:
         self._post_request(target, call=1)
@@ -186,4 +192,16 @@ class BlueforsLD400(Instrument):
     @property
     def api_version(self) -> Optional[str]:
         return self.__api_version
+
+    @property
+    def system_version(self) -> Optional[str]:
+        return self.__system_version
+
+    @property
+    def system_name(self) -> Optional[str]:
+        return self.__system_name
+
+    @property
+    def system_info(self) -> Optional[dict[str, Any]]:
+        return self.__system_info
 
