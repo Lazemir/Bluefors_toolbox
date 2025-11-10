@@ -1,68 +1,77 @@
 import time
 import threading
 from collections import deque
-from typing import Literal, Callable, Optional
+from typing import Literal, Callable, Optional, Tuple
 import numpy as np
 from datetime import datetime, timedelta
 from abc import ABC, abstractmethod
+
+from numpy.typing import NDArray
 from scipy.optimize import curve_fit
 
 # For displaying the chart in Jupyter Notebook
 import plotly.graph_objects as go
 from IPython.display import display
+from sklearn.metrics import r2_score
 
 from scr.instrument_drivers.bluefors.lakeshore_model_372 import Heater
 
 
 class TimedQueue:
-    def __init__(self, ttl: timedelta, minimal_timespan: timedelta) -> None:
-        self._temperature_queue = deque()
-        self._time_queue = deque()
-        assert ttl > minimal_timespan, "TTL must exceed minimal timespan"
+    def __init__(self, ttl: timedelta, minimal_timespan: Optional[timedelta] = None) -> None:
+        self._values: deque[float] = deque()
+        self._times: deque[datetime] = deque()
         self.ttl = ttl
-        self.full_time = minimal_timespan
+        self.full_time = minimal_timespan if minimal_timespan else ttl - timedelta(minutes=1)
+        assert self.ttl > self.full_time, "TTL must exceed minimal timespan"
 
     def _cleanup(self) -> None:
         now = datetime.now()
-        while self._time_queue and now - self._time_queue[0] > self.ttl:
-            self._time_queue.popleft()
-            self._temperature_queue.popleft()
+        while self._times and now - self._times[0] > self.ttl:
+            self._times.popleft()
+            self._values.popleft()
 
     def append(self, value: float) -> None:
         self._cleanup()
-        self._time_queue.append(datetime.now())
-        self._temperature_queue.append(value)
+        self._times.append(datetime.now())
+        self._values.append(value)
 
     def span(self) -> float:
         self._cleanup()
-        if len(self._temperature_queue) < 2:
+        if len(self._values) < 2:
             raise RuntimeError('Not enough data to compute span')
-        return float(np.max(self._temperature_queue) - np.min(self._temperature_queue))
+        return float(np.max(self._values) - np.min(self._values))
 
     def mean(self) -> float:
         self._cleanup()
-        return float(np.mean(self._temperature_queue))
+        return float(np.mean(self._values))
 
     def std(self) -> float:
         self._cleanup()
-        return float(np.std(self._temperature_queue))
+        return float(np.std(self._values))
 
     def is_full(self) -> bool:
         self._cleanup()
-        return bool(self._time_queue and self._time_queue[-1] - self._time_queue[0] >= self.full_time)
+        return bool(self._times and (self._times[-1] - self._times[0] >= self.full_time))
 
-    def get_data(self):
-        """Return lists of timestamps and temperature values."""
+    def get_data(self) -> Tuple[NDArray[datetime], NDArray[float]]:
         self._cleanup()
-        return list(self._time_queue), list(self._temperature_queue)
+        return np.asarray(self._times), np.asarray(self._values)
+
+    def clear(self) -> None:
+        self._times.clear()
+        self._values.clear()
 
 
 class BackgroundWorker(ABC):
     def __init__(self, update_interval: timedelta):
         self._update_interval = update_interval
         self._stop_flag = threading.Event()
-        self._event = threading.Event()
+        self._wakeup = threading.Event()
         self._thread: Optional[threading.Thread] = None
+
+    def __del__(self):
+        self.stop()
 
     def start(self):
         if self._thread and self._thread.is_alive():
@@ -72,9 +81,13 @@ class BackgroundWorker(ABC):
 
     def stop(self):
         self._stop_flag.set()
-        self._event.set()
+        self._wakeup.set()
         if self._thread:
             self._thread.join()
+
+    def _wait(self):
+        self._wakeup.wait(self._update_interval.total_seconds())
+        self._wakeup.clear()
 
     @abstractmethod
     def _run(self):
@@ -86,18 +99,14 @@ class TemperaturePoller(BackgroundWorker):
             self,
             queue: TimedQueue,
             sensor_read: Callable[[], float],
-            context_getter: Callable[[], bool],
-            interval_context: timedelta = timedelta(seconds=1),
-            interval_no_context: timedelta = timedelta(seconds=60)
+            update_interval: timedelta = timedelta(seconds=1),
     ):
         """
         Poll sensor in background, append to queue, switch rate by context.
         """
-        super().__init__(update_interval=interval_no_context)
+        super().__init__(update_interval)
         self._queue = queue
         self._sensor_read = sensor_read
-        self._context_getter = context_getter
-        self._interval_ctx = interval_context
 
     def _run(self):
         while not self._stop_flag.is_set():
@@ -107,25 +116,59 @@ class TemperaturePoller(BackgroundWorker):
             except Exception as e:
                 print(f"Polling error: {e}")
             # determine next wait
-            interval = self._interval_ctx if self._context_getter() else self._update_interval
-            self._event.wait(interval.total_seconds())
-            self._event.clear()
+            self._wait()
+
+
+def _fit_linear(x: np.ndarray, y: np.ndarray) -> tuple[float, float]:
+    """
+    Fit a linear function y = m * x + b to the data (x, y) using curve_fit,
+    and compute the coefficient of determination R² using sklearn's r2_score.
+
+    Parameters
+    ----------
+    x : np.ndarray
+        Independent variable data.
+    y : np.ndarray
+        Dependent variable data.
+
+    Returns
+    -------
+    k : float
+        Slope of the fitted line.
+    r2 : float
+        Coefficient of determination R² of the fit.
+    """
+
+    # Model definition
+    def linear_model(x, k, b):
+        return k * x + b
+
+        # Fit the model to data
+
+    popt, _ = curve_fit(linear_model, x, y)
+    k, b = popt
+
+    # Generate predictions
+    y_pred = linear_model(x, k, b)
+
+    # Compute R² score
+    r2 = r2_score(y, y_pred)
+
+    return k, r2
 
 
 class StableTemperaturePoller(TemperaturePoller):
     def __init__(
-        self,
-        queue: TimedQueue,
-        sensor_read: Callable[[], float],
-        context_getter: Callable[[], bool],
-        stability_kelvin: float,
-        interval_context: timedelta = timedelta(seconds=1),
-        interval_no_context: timedelta = timedelta(seconds=60)
+            self,
+            stability_queue: TimedQueue,
+            *additional_queues: TimedQueue,
+            sensor_read: Callable[[], float],
+            stability_kelvin: float,
+            update_interval: timedelta = timedelta(seconds=1),
     ):
-        """
-        Extends poller: detects stability when slope*window <= stability_kelvin.
-        """
-        super().__init__(queue, sensor_read, context_getter, interval_context, interval_no_context)
+        super().__init__(stability_queue, sensor_read, update_interval)
+        self._additional_queues = additional_queues
+        self._sensor_read = sensor_read
         self.stability_kelvin = stability_kelvin
         self._stable_event = threading.Event()
         self._stable_start: Optional[datetime] = None
@@ -137,54 +180,50 @@ class StableTemperaturePoller(TemperaturePoller):
         t0 = times[0]
         t_secs = np.array([(t - t0).total_seconds() for t in times])
         y = np.array(temps)
-        k, _ = curve_fit(lambda t, k, b: k * t + b, t_secs, y)[0]
+        k, r2 = _fit_linear(t_secs, y)
         window_sec = self._queue.full_time.total_seconds()
-        # total change over window: slope * window length
-        if abs(k * window_sec) <= self.stability_kelvin:
+        if abs(k * window_sec) <= self.stability_kelvin and r2 > 0.95:
             if not self._stable_event.is_set():
                 self._stable_start = datetime.now() - self._queue.full_time
                 self._stable_event.set()
+        else:
+            if self._stable_event.is_set():
+                self._stable_event.clear()
+                self._queue.clear()
+                self._stable_start = None
 
     def _run(self):
         while not self._stop_flag.is_set():
             try:
                 val = self._sensor_read()
+                # append to both queues
                 self._queue.append(val)
+                for queue in self._additional_queues:
+                    queue.append(val)
                 self._evaluate_stability()
             except Exception as e:
                 print(f"Stable poll error: {e}")
-            interval = self._interval_ctx if self._context_getter() else self._update_interval
-            self._event.wait(interval.total_seconds())
-            self._event.clear()
+            self._wait()
 
     @property
     def stable_start_time(self) -> Optional[datetime]:
-        """Returns the datetime when stability was first detected."""
         return self._stable_start
 
     def wait_for_stability(self, timeout: Optional[float] = None) -> timedelta:
-        """
-        Blocks until stability is detected or timeout expires.
-        Returns the elapsed time until stability is reached.
-        Raises TimeoutError if the timeout is reached before stability.
-        """
         start_time = datetime.now()
         if not self._stable_event.wait(timeout):
-            raise TimeoutError("Temperature did not stabilize within the given timeout")
-        detect_time = datetime.now()
-        return detect_time - start_time
+            raise TimeoutError("Temperature did not stabilize within timeout")
+        return datetime.now() - start_time
+
 
 class TemperaturePlotter(BackgroundWorker):
     def __init__(
             self,
             queue: TimedQueue,
-            interval: timedelta = timedelta(seconds=1),
+            update_interval: timedelta = timedelta(seconds=1),
             stable_getter: Optional[Callable[[], Optional[datetime]]] = None
     ):
-        """
-        Background plotter: shows queue data, highlights stable points.
-        """
-        super().__init__(update_interval=interval)
+        super().__init__(update_interval)
         self._queue = queue
         self._stable_getter = stable_getter
 
@@ -206,8 +245,7 @@ class TemperaturePlotter(BackgroundWorker):
             with fig.batch_update():
                 fig.data[0].x, fig.data[0].y = times, temps
                 fig.data[1].x, fig.data[1].y = stable_times, stable_vals
-            self._event.wait(self._update_interval.total_seconds())
-            self._event.clear()
+            self._wait()
 
 
 class TemperatureController:
@@ -216,46 +254,49 @@ class TemperatureController:
             lakeshore,
             target_sensor: Literal['pt1', 'pt2', 'still', 'mxc'],
             max_temperature: float,
+            plot_window: timedelta = timedelta(minutes=10),
+            stability_window: timedelta = timedelta(minutes=30),
+            # min_plot_span: timedelta = timedelta(minutes=5),
+            # min_stability_span: timedelta = timedelta(seconds=30),
             stability_kelvin: float = 1e-3
     ):
-        self.last_temperatures = TimedQueue(
-            ttl=timedelta(minutes=10), minimal_timespan=timedelta(minutes=5)
-        )
+        # separate queues for plotting and stability
+        self.plot_queue = TimedQueue(plot_window)
+        self.stability_queue = TimedQueue(stability_window)
+
         self._lakeshore = lakeshore
-        self._target_sensor_name = target_sensor
-        self._temperature = getattr(self._lakeshore.sensors, target_sensor).temperature
+        self._target_sensor = getattr(self._lakeshore.sensors, target_sensor).temperature
         self._context_active = False
+
+        # Poller writes to both queues
         self._poller = StableTemperaturePoller(
-            queue=self.last_temperatures,
-            sensor_read=self._temperature,
-            context_getter=lambda: self._context_active,
+            self.stability_queue,
+            self.plot_queue,
+            sensor_read=self._target_sensor,
             stability_kelvin=stability_kelvin
         )
         self._poller.start()
-        self._plotter: Optional[TemperaturePlotter] = None
 
     def __enter__(self):
         scanner = self._lakeshore.scanner
-        scanner.channel(self._target_sensor_name)
-        self._autoscan_at_enter = scanner.autoscan()
-        if self._autoscan_at_enter:
+        self._autoscan_state_at_enter = scanner.autoscan()
+        if self._autoscan_state_at_enter:
             scanner.autoscan(False)
         self._context_active = True
-        # start plotter
+
+        # Start background plotter on plot_queue
         self._plotter = TemperaturePlotter(
-            queue=self.last_temperatures,
+            queue=self.plot_queue,
             stable_getter=lambda: self._poller.stable_start_time
         )
         self._plotter.start()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        # stop plotter
-        if self._plotter:
-            self._plotter.stop()
+        del self._plotter
         self._context_active = False
-        # restore previous autoscan status
-        if self._autoscan_at_enter:
+        # restore autoscan
+        if self._autoscan_state_at_enter:
             self._lakeshore.scanner.autoscan(True)
 
     def wait_for_stability(self, timeout: Optional[float] = None) -> timedelta:
@@ -287,9 +328,10 @@ class PIDCalibrator(TemperatureController):
             with self.heater.write_session():
                 self.heater.range(r)
             time.sleep(5)
-            if self.wait_for_stability(timeout=None):
+            try:
+                self.wait_for_stability()
                 results.append(True)
-            else:
+            except TimeoutError:
                 results.append(False)
                 break
         self.heater.turn_off()
@@ -307,13 +349,14 @@ class PIDCalibrator(TemperatureController):
         while p < 1e4:
             with self.heater.write_session():
                 self.heater.p(p)
-            if self.wait_for_stability(timeout=None):
+            try:
+                self.wait_for_stability()
                 break
-            p *= 2
+            except TimeoutError:
+                p *= 2
         p = np.clip(p * 0.6, 0, 1e4)
         with self.heater.write_session():
             self.heater.p(p)
 
     def calibrate_i(self, setpoint: float, tolerance: float):
         ...
-
