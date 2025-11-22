@@ -2,7 +2,7 @@ from typing import Unpack
 
 from qcodes.instrument import InstrumentBaseKWArgs
 
-from scr.instrument_drivers.bluefors.utils import BlueforsApiModule, ReadonlyParameter
+from src.instrument_drivers.bluefors.utils import BlueforsApiModule, ReadonlyParameter
 
 
 class VC(BlueforsApiModule):

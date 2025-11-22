@@ -14,7 +14,7 @@ import plotly.graph_objects as go
 from IPython.display import display
 from sklearn.metrics import r2_score
 
-from scr.instrument_drivers.bluefors.lakeshore_model_372 import Heater
+from src.instrument_drivers.bluefors.lakeshore_model_372 import Heater
 
 
 class TimedQueue:

@@ -10,14 +10,14 @@ from qcodes.instrument import (
 )
 from requests import Response
 
-from scr.exceptions import APIError, OutdatedError
-from scr.instrument_drivers.bluefors.cryomech import CPA
-from scr.instrument_drivers.bluefors.edwards_nXDS import EdwardsNXDS
-from scr.instrument_drivers.bluefors.lakeshore_model_372 import Lakeshore
-from scr.instrument_drivers.bluefors.maxigauge import Maxigauge
-from scr.instrument_drivers.bluefors.pfeiffer_TC400 import PfeifferTC400
-from scr.instrument_drivers.bluefors.control_unit import ControlUnit
-from scr.instrument_drivers.bluefors.vc import VC
+from src.exceptions import APIError, OutdatedError
+from src.instrument_drivers.bluefors.cryomech import CPA
+from src.instrument_drivers.bluefors.edwards_nXDS import EdwardsNXDS
+from src.instrument_drivers.bluefors.lakeshore_model_372 import Lakeshore
+from src.instrument_drivers.bluefors.maxigauge import Maxigauge
+from src.instrument_drivers.bluefors.pfeiffer_TC400 import PfeifferTC400
+from src.instrument_drivers.bluefors.control_unit import ControlUnit
+from src.instrument_drivers.bluefors.vc import VC
 
 
 def _get_value_from_response(data, target: str) -> Any:

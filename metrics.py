@@ -6,10 +6,10 @@ from functools import wraps
 from prometheus_client import Gauge, Counter, Enum
 from prometheus_client.metrics import MetricWrapperBase
 
-from scr.exceptions import APIError
-from scr.instrument_drivers import BlueforsLD400
-from scr.instrument_drivers.bluefors.lakeshore_model_372 import Heater
-from scr.instrument_drivers.bluefors.maxigauge import PressureSensor
+from src.exceptions import APIError
+from src.instrument_drivers import BlueforsLD400
+from src.instrument_drivers.bluefors.lakeshore_model_372 import Heater
+from src.instrument_drivers.bluefors.maxigauge import PressureSensor
 
 NaN = float('NaN')
 
