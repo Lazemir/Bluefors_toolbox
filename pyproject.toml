@@ -3,7 +3,7 @@ requires = ["setuptools>=65"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "bluefors-temperature-exporter"
+name = "bluefors-toolbox"
 version = "0.1.0"
 description = "Prometheus metrics exporter for a Bluefors dilution refrigerator"
 readme = "README.md"
