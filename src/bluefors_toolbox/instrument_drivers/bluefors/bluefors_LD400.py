@@ -10,14 +10,14 @@ from qcodes.instrument import (
 )
 from requests import Response
 
-from src.exceptions import APIError, OutdatedError
-from src.instrument_drivers.bluefors.cryomech import CPA
-from src.instrument_drivers.bluefors.edwards_nXDS import EdwardsNXDS
-from src.instrument_drivers.bluefors.lakeshore_model_372 import Lakeshore
-from src.instrument_drivers.bluefors.maxigauge import Maxigauge
-from src.instrument_drivers.bluefors.pfeiffer_TC400 import PfeifferTC400
-from src.instrument_drivers.bluefors.control_unit import ControlUnit
-from src.instrument_drivers.bluefors.vc import VC
+from ...exceptions import APIError, OutdatedError
+from .cryomech import CPA
+from .edwards_nXDS import EdwardsNXDS
+from .lakeshore_model_372 import Lakeshore
+from .maxigauge import Maxigauge
+from .pfeiffer_TC400 import PfeifferTC400
+from .control_unit import ControlUnit
+from .vc import VC
 
 
 def _get_value_from_response(data, target: str) -> Any:
@@ -116,4 +116,3 @@ class BlueforsLD400(Instrument):
             yield
         finally:
             self.__data = None
-

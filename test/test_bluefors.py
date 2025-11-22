@@ -4,11 +4,11 @@ from typing import Iterable
 
 from dotenv import load_dotenv
 
-from src.instrument_drivers.bluefors import BlueforsLD400
-from src.instrument_drivers.bluefors.edwards_nXDS import EdwardsNXDS
-from src.instrument_drivers.bluefors.lakeshore_model_372 import Heater
-from src.instrument_drivers.bluefors.pfeiffer_TC400 import PfeifferTC400
-from src.instrument_drivers.bluefors.control_unit import ControlUnit
+from bluefors_toolbox import BlueforsLD400
+from bluefors_toolbox import EdwardsNXDS
+from bluefors_toolbox import Heater
+from bluefors_toolbox import PfeifferTC400
+from bluefors_toolbox import ControlUnit
 
 load_dotenv()
 

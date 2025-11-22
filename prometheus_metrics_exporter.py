@@ -6,7 +6,7 @@ from flask import Flask
 from werkzeug.middleware.dispatcher import DispatcherMiddleware
 from waitress import serve
 
-from src.instrument_drivers import BlueforsLD400
+from bluefors_toolbox import BlueforsLD400
 from metrics import (BlueforsMetrics, PulseTubeCompressorMetrics, GasHandlingSystemMetrics, TemperatureMetrics,
                      ScrollPumpMetrics, TurboPumpMetrics, ControlUnitMetrics, HeaterMetrics)
 

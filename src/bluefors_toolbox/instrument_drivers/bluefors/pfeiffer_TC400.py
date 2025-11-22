@@ -2,7 +2,7 @@ from typing import Unpack
 
 from qcodes.instrument import InstrumentBaseKWArgs
 
-from src.instrument_drivers.bluefors.utils import BlueforsApiModule, ReadonlyParameter
+from .utils import BlueforsApiModule, ReadonlyParameter
 
 
 class PfeifferTC400(BlueforsApiModule):

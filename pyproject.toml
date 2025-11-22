@@ -23,6 +23,9 @@ dependencies = [
     "scikit-learn~=1.6.1",
 ]
 
+[tool.setuptools]
+package-dir = {"" = "src"}
+
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["*"]

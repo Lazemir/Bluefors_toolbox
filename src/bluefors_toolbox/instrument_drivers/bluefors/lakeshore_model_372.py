@@ -4,8 +4,7 @@ from typing import Unpack, TYPE_CHECKING, ClassVar
 from qcodes.instrument import InstrumentBaseKWArgs
 from qcodes.instrument_drivers.Lakeshore.Lakeshore_model_372 import LakeshoreModel372Output as QCoDeS_LakeshoreOutput
 
-from src.instrument_drivers.bluefors.utils import BlueforsApiChannel, ReadonlyParameter, BlueforsApiModule, Parameter, \
-    _bool_mapping
+from .utils import BlueforsApiChannel, ReadonlyParameter, BlueforsApiModule, Parameter, _bool_mapping
 
 if TYPE_CHECKING:
     from .bluefors_LD400 import BlueforsLD400
